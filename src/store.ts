@@ -1,30 +1,28 @@
-export type Row = Record<string, string | number | boolean | null>;
+import type { Row } from "./csv";
 
-export type Dataset = {
-  fileName: string;
-  headers: string[];
-  idColumn: string;
-  rows: Row[];
-  checkins: Record<string, string>; // id -> ISO timestamp
-};
+export const COL = {
+  id: "Attendee ID",
+  name: "Full Name",
+  email: "Email",
+  company: "Company",
+  title: "Job Title",
+  time: "CheckIn Time",
+} as const;
 
-const KEY = "offline-checkin:dataset";
+export const REQUIRED = Object.values(COL);
 
-export function load(): Dataset | null {
-  const raw = localStorage.getItem(KEY);
-  return raw ? (JSON.parse(raw) as Dataset) : null;
+const norm = (s: string) => s.trim().toLowerCase();
+
+export const findById = (rows: Row[], id: string) => rows.find((r) => norm(r[COL.id]) === norm(id));
+
+export function search(rows: Row[], q: string, limit = 20): Row[] {
+  const n = norm(q);
+  if (n.length < 2) return [];
+  return rows.filter((r) => norm(r[COL.name]).includes(n) || norm(r[COL.email]).includes(n)).slice(0, limit);
 }
 
-export function save(ds: Dataset | null) {
-  if (ds) localStorage.setItem(KEY, JSON.stringify(ds));
-  else localStorage.removeItem(KEY);
-}
-
-export function findById(ds: Dataset, id: string): Row | undefined {
-  const want = id.trim().toLowerCase();
-  return ds.rows.find((r) => String(r[ds.idColumn] ?? "").trim().toLowerCase() === want);
-}
-
-export function guessIdColumn(headers: string[]): string {
-  return headers.find((h) => /id|qr|code|ticket/i.test(h)) ?? headers[0];
+export function now(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
 }

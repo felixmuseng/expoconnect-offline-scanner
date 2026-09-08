@@ -1,28 +1,33 @@
 # Offline Check-in (test)
 
-Client-only React app. Import attendee xlsx, scan QR with webcam, mark check-in, export xlsx. Printing is mocked.
+Client-only React app for Chrome/Edge. Opens the attendee CSV, scans QR with webcam, writes `CheckIn Time` back into the same file, prints a badge over WebUSB (ESC/POS).
+
+CSV columns: `Attendee ID, Full Name, Email, Company, Job Title, CheckIn Time`. QR content = Attendee ID.
 
 ## Dev
 
 ```
 npm install
-npm run dev        # http://localhost:8000
+npm run dev                    # http://localhost:8000
+node scripts/make-sample.mjs   # sample/attendee_list.csv + sample/qr/*.png
 ```
 
-## Windows package
+## Use
+
+1. Open CSV. Browser asks once for read/write access. The file stays remembered across reloads.
+2. Connect printer (optional). Without it, prints go to the on-screen log.
+3. Scan QR, type an ID, search by name/email, or click Print in the table. Each check-in rewrites the CSV in place.
+
+## Docker Hub
 
 ```
-./pack.sh          # -> out/offline-checkin-win/
+IMAGE=docker.io/you/offline-checkin:latest ./publish.sh
 ```
 
-Copy that folder to the laptop. Double-click `start.bat`. It starts `caddy.exe` on `127.0.0.1:8000` and opens Edge in app mode. `stop.bat` kills the server.
+Operator: Docker Desktop → search the image → Pull → Run with host port `8000` → open `http://localhost:8000` in Edge or Chrome. Or use the `out/docker/` folder (`start.bat`).
 
-Data lives in the browser's localStorage for `localhost:8000`. Reset button clears it.
-
-## Docker package (laptops with Docker Desktop)
+## Plain folder (no Docker)
 
 ```
-IMAGE=ghcr.io/you/offline-checkin:latest ./publish.sh   # build + push + out/docker/
+./pack.sh   # -> out/offline-checkin-win/ with caddy.exe, start.bat, start.sh
 ```
-
-Give operators the `out/docker/` folder. `start.bat` runs `docker compose up -d` (pulls the image on first run, needs internet once, cached afterwards) and opens Edge in app mode. `update.bat` pulls the newest image while online. `stop.bat` stops the container.

@@ -1,20 +1,20 @@
-// Generates sample/attendee_list.xlsx and sample/qr/*.png for testing.
-import * as XLSX from "xlsx";
+// Generates sample/attendee_list.csv and sample/qr/*.png for testing.
 import { mkdirSync, writeFileSync } from "node:fs";
 import QRCode from "qrcode";
 
+const headers = ["Attendee ID", "Full Name", "Email", "Company", "Job Title", "CheckIn Time"];
 const rows = [
-  { id: "ATT-1001", name: "Budi Santoso", company: "PT Maju Jaya", email: "budi@majujaya.id", ticket: "VIP" },
-  { id: "ATT-1002", name: "Siti Rahma", company: "CV Sinar Abadi", email: "siti@sinarabadi.id", ticket: "Regular" },
-  { id: "ATT-1003", name: "Andi Wijaya", company: "PT Nusantara Tech", email: "andi@nusantaratech.id", ticket: "Regular" },
-  { id: "ATT-1004", name: "Dewi Lestari", company: "Wellbeing Champions", email: "dewi@wellbeingchampions.sg", ticket: "Speaker" },
-  { id: "ATT-1005", name: "Rizky Pratama", company: "PT Cahaya Digital", email: "rizky@cahayadigital.id", ticket: "VIP" },
+  ["ATT-1001", "Budi Santoso", "budi@majujaya.id", "PT Maju Jaya", "CEO"],
+  ["ATT-1002", "Siti Rahma", "siti@sinarabadi.id", "CV Sinar Abadi", "HR Manager"],
+  ["ATT-1003", "Andi Wijaya", "andi@nusantaratech.id", "PT Nusantara Tech", "Engineer"],
+  ["ATT-1004", "Dewi Lestari", "dewi@wellbeingchampions.sg", "Wellbeing Champions", "Speaker, Wellbeing"],
+  ["ATT-1005", "Rizky Pratama", "rizky@cahayadigital.id", "PT Cahaya Digital", "Marketing Lead"],
 ];
 
-mkdirSync("sample/qr", { recursive: true });
-const wb = XLSX.utils.book_new();
-XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "attendees");
-writeFileSync("sample/attendee_list.xlsx", XLSX.write(wb, { type: "buffer", bookType: "xlsx" }));
+const q = (v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+const csv = [headers, ...rows.map((r) => [...r, ""])].map((r) => r.map(q).join(",")).join("\r\n") + "\r\n";
 
-for (const r of rows) await QRCode.toFile(`sample/qr/${r.id}.png`, r.id, { width: 400 });
-console.log(`Wrote sample/attendee_list.xlsx and ${rows.length} QR PNGs`);
+mkdirSync("sample/qr", { recursive: true });
+writeFileSync("sample/attendee_list.csv", csv);
+for (const [id] of rows) await QRCode.toFile(`sample/qr/${id}.png`, id, { width: 400 });
+console.log(`Wrote sample/attendee_list.csv and ${rows.length} QR PNGs`);

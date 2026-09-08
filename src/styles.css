@@ -6,8 +6,14 @@ h1 { font-size: 20px; margin: 0; }
 .actions { display: flex; gap: 8px; }
 button, .btn { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #c8ccd2; background: #fff; cursor: pointer; }
 button:disabled { opacity: .5; cursor: default; }
-.btn { background: #2563eb; color: #fff; border-color: #2563eb; }
-.danger { color: #b91c1c; }
+.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+.search { width: 100%; box-sizing: border-box; font: inherit; padding: 8px; margin-top: 12px; border: 1px solid #c8ccd2; border-radius: 6px; }
+.hits { list-style: none; margin: 4px 0 0; padding: 0; background: #fff; border: 1px solid #c8ccd2; border-radius: 6px; max-height: 240px; overflow: auto; }
+.hits li { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 10px; border-bottom: 1px solid #eee; }
+table { width: 100%; border-collapse: collapse; margin-top: 16px; background: #fff; font-size: 14px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid #e5e7eb; white-space: nowrap; }
+th { background: #f9fafb; position: sticky; top: 0; }
+tr.done td { background: #ecfdf5; }
 .hint, .meta { color: #555; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 12px; }
 @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
