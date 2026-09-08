@@ -11,7 +11,7 @@ npm run build
 mkdir -p "$OUT" .cache
 rm -rf "$OUT/dist"
 cp -r dist "$OUT/dist"
-cp win/*.bat "$OUT/"
+cp win/*.bat win/*.sh "$OUT/"
 
 if [ ! -f "$CACHE" ]; then
   curl -fL -o "$CACHE" "https://github.com/caddyserver/caddy/releases/download/v$CADDY_VERSION/caddy_${CADDY_VERSION}_windows_amd64.zip"
