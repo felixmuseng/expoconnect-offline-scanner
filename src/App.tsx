@@ -47,7 +47,9 @@ export function App() {
 
   async function pick() {
     try {
-      await openHandle(await fs.pickCsv());
+      const h = await fs.pickCsv();
+      if (!(await fs.hasPermission(h, true))) throw new Error("Write access to the CSV was denied");
+      await openHandle(h);
     } catch (e) {
       if ((e as Error).name !== "AbortError") setResult({ kind: "error", message: (e as Error).message });
     }
