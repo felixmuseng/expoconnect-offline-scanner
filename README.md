@@ -26,6 +26,20 @@ node scripts/make-sample.mjs   # sample/attendee_list.csv + sample/qr/*.png
 4. The search button (top right) opens the attendee list: search by name or email, or
    Print and Reprint any row. Each check-in rewrites the CSV in place.
 
+## Printer on Linux
+
+The USB node is owned by group `lp`, so the browser gets `Failed to execute 'open' on
+'USBDevice': Access denied.` One udev rule fixes it (this is the XP-420B; `lsusb` gives
+the IDs for another printer):
+
+```
+echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2d37", ATTR{idProduct}=="83d7", TAG+="uaccess"' \
+  | sudo tee /etc/udev/rules.d/99-label-printer.rules
+sudo udevadm control --reload
+```
+
+Unplug and replug the printer, then reload the page. Windows and macOS need nothing.
+
 ## Docker Hub
 
 One-time setup:
