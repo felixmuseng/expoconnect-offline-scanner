@@ -39,9 +39,13 @@ The USB node is owned by group `lp`, so the browser gets `Failed to execute 'ope
 Both operator folders ship the script, and `start.sh` reminds the operator if the rule
 is missing.
 
-It installs a udev rule that hands any USB printer to whoever is logged in at the
-screen. Not printer-specific — it matches USB interface class 07, so it covers the
-XP-420B and any other label or receipt printer.
+Two things, neither printer-specific — both match USB interface class 07, so they cover
+the XP-420B and any other label or receipt printer:
+
+- a udev rule handing the device to whoever is logged in at the screen (`uaccess`, plus
+  group `plugdev` where logind sets no ACL). Without it: `open` fails.
+- a blacklist for the `usblp` kernel driver, which otherwise holds the printer interface
+  and makes `claimInterface` fail. CUPS still prints — its usb backend talks libusb.
 
 Replug the printer, then reload the page. Windows and macOS need nothing.
 

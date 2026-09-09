@@ -12,6 +12,11 @@ EOF
 sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=usb --action=add
 
+# usblp grabs printer interfaces and never lets go, so claimInterface fails in the
+# browser. CUPS does not need it — its usb backend talks libusb.
+echo 'blacklist usblp' | sudo tee /etc/modprobe.d/blacklist-usblp.conf >/dev/null
+sudo modprobe -r usblp 2>/dev/null || echo "usblp is busy; unplug the printer, or reboot."
+
 if ! id -nG | tr ' ' '\n' | grep -qx plugdev; then
   echo "Not in group plugdev: run 'sudo usermod -aG plugdev $USER' and log out once."
 fi
