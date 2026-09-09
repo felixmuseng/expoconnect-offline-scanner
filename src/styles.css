@@ -146,13 +146,22 @@ body { margin: 0; }
   gap: 18px;
   padding: 20px;
   justify-items: center;
-  align-items: center;
+}
+/* The row is the reference: the frame is as wide as the row is tall times the
+   camera's ratio, capped by the stage width. It can never be clamped out of
+   shape, so nothing the camera sees is cropped. */
+.viewport {
+  --cam: 1.7778; /* replaced inline once the camera reports its real ratio */
+  min-height: 0;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  container-type: size;
 }
 .scanner {
   position: relative;
-  width: var(--stage-w);
-  max-height: 100%;
-  aspect-ratio: 16 / 9;
+  width: min(var(--stage-w), calc(100cqh * var(--cam)));
+  aspect-ratio: var(--cam);
   background: var(--stage);
   border-radius: var(--r-lg);
   overflow: hidden;

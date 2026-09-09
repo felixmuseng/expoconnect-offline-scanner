@@ -58,24 +58,27 @@ export function Scanner({ onScan, paused }: Props) {
   }, []);
 
   return (
-    <div className="scanner" style={ratio ? { aspectRatio: String(ratio) } : undefined}>
-      <video
-        ref={videoRef}
-        muted
-        playsInline
-        onLoadedMetadata={(e) => {
-          const v = e.currentTarget;
-          if (v.videoWidth) setRatio(v.videoWidth / v.videoHeight);
-        }}
-      />
-      <div className="brackets">
-        <span className="tl" />
-        <span className="tr" />
-        <span className="bl" />
-        <span className="br" />
+    <div className="viewport" style={ratio ? ({ "--cam": ratio } as React.CSSProperties) : undefined}>
+      <div className="scanner">
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          disablePictureInPicture
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            if (v.videoWidth) setRatio(v.videoWidth / v.videoHeight);
+          }}
+        />
+        <div className="brackets">
+          <span className="tl" />
+          <span className="tr" />
+          <span className="bl" />
+          <span className="br" />
+        </div>
+        {error && <p className="banner err">Camera: {error}</p>}
+        {paused && <div className="overlay">Paused</div>}
       </div>
-      {error && <p className="banner err">Camera: {error}</p>}
-      {paused && <div className="overlay">Paused</div>}
     </div>
   );
 }
