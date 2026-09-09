@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import * as printer from "./print";
 import { PRESETS, type Settings } from "./settings";
 
@@ -14,6 +14,10 @@ export function SettingsDialog({ value, onChange, onClose, printerName, onToggle
   const [note, setNote] = useState<string | null>(null);
   const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...value, [k]: v });
   const preset = PRESETS.find((p) => p.widthMm === value.widthMm && p.heightMm === value.heightMm);
+  const preview = useMemo(
+    () => (value.engine === "tspl" ? printer.renderLabel(printer.SAMPLE, value).toDataURL() : null),
+    [value],
+  );
 
   async function test() {
     try {
@@ -93,9 +97,17 @@ export function SettingsDialog({ value, onChange, onClose, printerName, onToggle
               <Num label="Speed (ips)" min={1} max={12} value={value.speed} onChange={(v) => set("speed", v)} />
               <Num label="QR cell (dots)" min={1} max={10} value={value.qrCell} onChange={(v) => set("qrCell", v)} />
             </div>
+            {preview && (
+              <img
+                className="label-preview"
+                src={preview}
+                alt="Label preview"
+                style={{ aspectRatio: `${value.widthMm} / ${value.heightMm}` }}
+              />
+            )}
             <p className="hint">
-              Label settings apply to TSPL printers, which size the QR to the label; QR cell and copies
-              are what ESC/POS uses.
+              The preview is exactly what a TSPL printer puts on the label; QR cell and copies are what
+              ESC/POS uses.
             </p>
           </div>
         </div>
