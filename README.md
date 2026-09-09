@@ -22,7 +22,9 @@ node scripts/make-sample.mjs   # sample/attendee_list.csv + sample/qr/*.png
 
 1. Open CSV. Browser asks once for read/write access. The file stays remembered across reloads.
 2. Settings → Connect printer, pick the engine and label size, Test print. Without a printer, prints go to the on-screen log.
-3. Scan QR, type an ID, search by name/email, or click Print in the table. Each check-in rewrites the CSV in place.
+3. Scan a QR or type an ID. The scanner fills the page; nothing else needs scrolling.
+4. The search button (top right) opens the attendee list: search by name or email, or
+   Print and Reprint any row. Each check-in rewrites the CSV in place.
 
 ## Docker Hub
 
@@ -36,10 +38,21 @@ One-time setup:
 Then, per release:
 
 ```
-IMAGE=docker.io/you/offline-checkin:latest ./publish.sh
+./publish.sh              # build, tag, push, write out/docker/
+./publish.sh --no-push    # build and tag only
 ```
 
-Operator: Docker Desktop → search the image → Pull → Run with host port `8000` → open `http://localhost:8000` in Edge or Chrome. Or use the `out/docker/` folder (`start.bat`).
+Versions follow the QuantumBytes scheme, `ENV-YYYY.MM.PATCH-SHA`:
+
+- `ENV` comes from the branch — `master`/`main`/`production` → `prod`, `stag` → `stag`, anything else → `dev`.
+- `PATCH` counts releases within the calendar month, read back from the pushed git tags.
+- Each release pushes three tags: the version, `ENV-latest`, and `latest`. The version is
+  also pushed as a git tag, so a running container traces back to a commit.
+- `.docker-version` records what was published.
+
+Override the repository with `IMAGE_NAME=you/offline-checkin ./publish.sh`.
+
+Operator: Docker Desktop → search the image → Pull → Run → Optional settings → host port `8000` → open `http://localhost:8000` in Edge or Chrome. Or use the `out/docker/` folder (`start.bat`), which pins `prod-latest` so `update.bat` picks up the next release.
 
 The image holds only the built app and nginx — the build stage is discarded, so `sample/`
 and the repo never reach the published layers.

@@ -22,10 +22,12 @@ export function App() {
   const [query, setQuery] = useState("");
   const [manual, setManual] = useState("");
   const [log, setLog] = useState<string[]>([]);
+  const [showLog, setShowLog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [printerName, setPrinterName] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
 
   useEffect(() => {
     if (!fs.supported) return;
@@ -44,6 +46,17 @@ export function App() {
   }, []);
 
   useEffect(() => saveSettings(settings), [settings]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      if (result && result.kind !== "error") setResult(null);
+      else if (showSearch) setShowSearch(false);
+      else if (showSettings) setShowSettings(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [result, showSearch, showSettings]);
 
   async function openHandle(h: FileSystemFileHandle) {
     try {
@@ -118,8 +131,13 @@ export function App() {
 
   if (!fs.supported)
     return (
-      <div className="page">
-        <p className="banner err">This app needs Chrome or Edge (File System Access API).</p>
+      <div className="shell">
+        <main className="empty">
+          <div className="empty-inner">
+            <h2>Wrong browser</h2>
+            <p>This app needs Chrome or Edge. It writes check-ins straight into your CSV, which other browsers cannot do.</p>
+          </div>
+        </main>
       </div>
     );
 
@@ -127,144 +145,114 @@ export function App() {
   const hits = doc ? search(doc.rows, query) : [];
 
   return (
-    <div className="page">
-      <header className="page-head">
-        <div>
+    <div className="shell">
+      <header className="topbar">
+        <div className="brand">
           <h1>Offline Check-in</h1>
-          <p className="sub">
-            {doc
-              ? `${doc.name} · ${checked}/${doc.rows.length} checked in`
-              : "Open the attendee CSV. Check-ins are written back into that same file."}
-          </p>
+          {doc && <span className="file">{doc.name}</span>}
         </div>
-        <div className="actions">
-          {doc ? (
-            <button className="btn outline" onClick={close}>
-              Close file
-            </button>
-          ) : (
-            <button className="btn primary" onClick={pick}>
-              Open CSV
-            </button>
-          )}
-          <button className="btn outline" onClick={() => setShowSettings(true)}>
-            <GearIcon />
-            Settings
+        <div className="spacer" />
+
+        {doc && (
+          <div className="count">
+            <b>{checked}</b>
+            <span>/ {doc.rows.length} checked in</span>
+          </div>
+        )}
+
+        <span className={printerName ? "chip live" : "chip"} title={printerName ?? "No printer connected"}>
+          <span className="dot" />
+          {printerName ?? "No printer"}
+        </span>
+
+        {doc && (
+          <button className="icon-btn" onClick={() => setShowSearch(true)} title="Search and attendee list" aria-label="Search and attendee list">
+            <SearchIcon />
           </button>
-        </div>
+        )}
+        <button className="icon-btn" onClick={() => setShowSettings(true)} title="Settings" aria-label="Settings">
+          <GearIcon />
+        </button>
+        {doc && (
+          <button className="btn quiet sm" onClick={close}>
+            Close file
+          </button>
+        )}
       </header>
 
-      <hr className="rule" />
-
       {locked && !doc && (
-        <p className="banner info">
-          Last file: <b>{locked.name}</b>
-          <button className="btn sm primary" onClick={unlock}>
-            Reopen
-          </button>
-        </p>
+        <div className="bar">
+          <p className="banner info">
+            Last file: <b>{locked.name}</b>
+            <button className="btn sm primary" onClick={unlock}>
+              Reopen
+            </button>
+          </p>
+        </div>
+      )}
+      {result?.kind === "error" && (
+        <div className="bar">
+          <p className="banner err">{result.message}</p>
+        </div>
       )}
 
-      {result?.kind === "error" && <p className="banner err">{result.message}</p>}
+      {doc ? (
+        <main className="stage">
+          <Scanner onScan={handleScan} paused={busy} />
+          <form
+            className="entry"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleScan(manual);
+              setManual("");
+            }}
+          >
+            <input
+              className="field"
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+              placeholder="Type or USB-scan an Attendee ID"
+            />
+            <button className="btn primary lg" type="submit" disabled={busy}>
+              Check in
+            </button>
+          </form>
+        </main>
+      ) : (
+        <main className="empty">
+          <div className="empty-inner">
+            <h2>Open the attendee list</h2>
+            <p>Pick the CSV exported from ExpoConnect. Check-in times are written straight back into that same file, so keep it where it is.</p>
+            <button className="btn primary lg" onClick={pick}>
+              Open CSV
+            </button>
+          </div>
+        </main>
+      )}
 
       {doc && (
-        <>
-          <div className="cols">
-            <div className="col-main">
-              <section className="card">
-                <div className="card-head">
-                  <h2>Scan or enter ID</h2>
-                  <span className="status">
-                    <span className={printerName ? "dot on" : "dot"} />
-                    {printerName ?? "No printer"}
-                  </span>
-                </div>
-                <form
-                  className="row"
-                  onSubmit={(e) => {
-                    e.preventDefault();
-                    handleScan(manual);
-                    setManual("");
-                  }}
-                >
-                  <input
-                    className="field"
-                    value={manual}
-                    onChange={(e) => setManual(e.target.value)}
-                    placeholder="Or type / USB-scan Attendee ID"
-                  />
-                  <button className="btn primary" type="submit" disabled={busy}>
-                    Check in
-                  </button>
-                </form>
-                <input
-                  className="field search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search by full name or email"
-                />
-                {query.length >= 2 && (
-                  <ul className="hits">
-                    {hits.length === 0 && <li className="empty">No match</li>}
-                    {hits.map((r) => (
-                      <li key={r[COL.id]}>
-                        <span className="avatar sm">{initials(r[COL.name])}</span>
-                        <span className="who">
-                          <b>{r[COL.name]}</b>
-                          <span>
-                            {r[COL.email]} · {r[COL.company]}
-                          </span>
-                        </span>
-                        <PrintButton row={r} busy={busy} onPrint={checkIn} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </section>
-
-              <section className="card">
-                <div className="card-head">
-                  <h2>Camera scanner</h2>
-                </div>
-                <Scanner onScan={handleScan} paused={busy} />
-              </section>
-            </div>
-
-            <aside className="card">
-              <div className="card-head">
-                <h2>Print log</h2>
-              </div>
-              <pre className="log">{log.join("\n") || "—"}</pre>
-            </aside>
+        <footer>
+          <div className="activity">
+            <span className="last">{log[0] ?? "No badges printed yet"}</span>
+            <button className="btn quiet sm" onClick={() => setShowLog((v) => !v)} disabled={log.length === 0}>
+              {showLog ? "Hide log" : `Print log (${log.length})`}
+            </button>
           </div>
+          {showLog && log.length > 0 && <pre className="log">{log.join("\n")}</pre>}
+        </footer>
+      )}
 
-          <section className="card table-card">
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    {doc.headers.map((h) => (
-                      <th key={h}>{h}</th>
-                    ))}
-                    <th />
-                  </tr>
-                </thead>
-                <tbody>
-                  {doc.rows.map((r) => (
-                    <tr key={r[COL.id]} className={r[COL.time] ? "done" : ""}>
-                      {doc.headers.map((h) => (
-                        <td key={h}>{r[h]}</td>
-                      ))}
-                      <td>
-                        <PrintButton row={r} busy={busy} onPrint={checkIn} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        </>
+      {showSearch && doc && (
+        <SearchDialog
+          rows={doc.rows}
+          headers={doc.headers}
+          hits={hits}
+          query={query}
+          onQuery={setQuery}
+          busy={busy}
+          onPrint={checkIn}
+          onClose={() => setShowSearch(false)}
+        />
       )}
 
       {result && result.kind !== "error" && <ResultDialog r={result} onClose={() => setResult(null)} />}
@@ -290,6 +278,90 @@ const initials = (name: string) =>
     .map((w) => w[0]?.toUpperCase() ?? "")
     .join("");
 
+function SearchDialog({
+  rows,
+  headers,
+  hits,
+  query,
+  onQuery,
+  busy,
+  onPrint,
+  onClose,
+}: {
+  rows: Row[];
+  headers: string[];
+  hits: Row[];
+  query: string;
+  onQuery: (q: string) => void;
+  busy: boolean;
+  onPrint: (r: Row, force: boolean) => void;
+  onClose: () => void;
+}) {
+  const searching = query.length >= 2;
+  return (
+    <div className="scrim" onClick={onClose}>
+      <div className="sheet xl" onClick={(e) => e.stopPropagation()}>
+        <div className="search-head">
+          <input
+            className="field"
+            value={query}
+            onChange={(e) => onQuery(e.target.value)}
+            placeholder="Search by full name or email"
+            /* biome-ignore lint/a11y/noAutofocus: the operator opened this to type. */
+            autoFocus
+          />
+          <button className="icon-btn" onClick={onClose} aria-label="Close">
+            <XIcon />
+          </button>
+        </div>
+
+        <div className="sheet-body flush">
+          {searching ? (
+            <ul className="rows">
+              {hits.length === 0 && <li className="none">Nobody matches “{query}”</li>}
+              {hits.map((r) => (
+                <li key={r[COL.id]}>
+                  <span className="avatar">{initials(r[COL.name])}</span>
+                  <span className="who">
+                    <b>{r[COL.name]}</b>
+                    <span>
+                      {r[COL.email]} · {r[COL.company] || "—"}
+                    </span>
+                  </span>
+                  <PrintButton row={r} busy={busy} onPrint={onPrint} />
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  {headers.map((h) => (
+                    <th key={h}>{h}</th>
+                  ))}
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r[COL.id]} className={r[COL.time] ? "done" : ""}>
+                    {headers.map((h) => (
+                      <td key={h}>{r[h]}</td>
+                    ))}
+                    <td>
+                      <PrintButton row={r} busy={busy} onPrint={onPrint} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PrintButton({ row, busy, onPrint }: { row: Row; busy: boolean; onPrint: (r: Row, force: boolean) => void }) {
   const done = Boolean(row[COL.time]);
   return (
@@ -300,27 +372,19 @@ function PrintButton({ row, busy, onPrint }: { row: Row; busy: boolean; onPrint:
 }
 
 function ResultDialog({ r, onClose }: { r: Exclude<Result, { kind: "error" }>; onClose: () => void }) {
-  const title = r.kind === "ok" ? "Check-in Success" : r.kind === "dup" ? "Already checked in" : "Not found";
+  const title = r.kind === "ok" ? "Checked in" : r.kind === "dup" ? "Already checked in" : "Not on the list";
   return (
     <div className="scrim" onClick={onClose}>
-      <div className={`dialog ${r.kind}`} onClick={(e) => e.stopPropagation()}>
-        <div className="dialog-head">
-          <button type="button" className="close" aria-label="Close" onClick={onClose}>
-            <XIcon />
-          </button>
-          <div className="icon">{r.kind === "ok" ? <CheckIcon /> : <AlertIcon />}</div>
+      <div className={`sheet md ${r.kind}`} onClick={(e) => e.stopPropagation()}>
+        <div className="result-head">
+          <div className="mark">{r.kind === "ok" ? <CheckIcon /> : <AlertIcon />}</div>
           <h2>{title}</h2>
-          {r.kind !== "miss" && r.row[COL.time] && (
-            <p className="stamp">
-              <ClockIcon />
-              {r.row[COL.time]}
-            </p>
-          )}
+          {r.kind !== "miss" && r.row[COL.time] && <p>{r.row[COL.time]}</p>}
         </div>
 
-        <div className="dialog-body">
+        <div className="sheet-body">
           {r.kind === "miss" ? (
-            <dl className="fields">
+            <dl className="facts" style={{ marginTop: 0, paddingTop: 0, borderTop: "none" }}>
               <div className="wide">
                 <dt>Scanned code</dt>
                 <dd>
@@ -331,25 +395,23 @@ function ResultDialog({ r, onClose }: { r: Exclude<Result, { kind: "error" }>; o
           ) : (
             <>
               <div className="identity">
-                <span className="avatar">{initials(r.row[COL.name])}</span>
+                <span className="avatar lg">{initials(r.row[COL.name])}</span>
                 <div>
                   <p className="name">{r.row[COL.name]}</p>
-                  <p>{r.row[COL.title]}</p>
-                  <p>{r.row[COL.company]}</p>
+                  <p>{[r.row[COL.title], r.row[COL.company]].filter(Boolean).join(" · ") || "—"}</p>
                 </div>
               </div>
-              <hr />
-              <dl className="fields">
+              <dl className="facts">
                 <div>
-                  <dt>{COL.email}</dt>
-                  <dd>{r.row[COL.email]}</dd>
+                  <dt>Email</dt>
+                  <dd>{r.row[COL.email] || "—"}</dd>
                 </div>
                 <div>
-                  <dt>{COL.time}</dt>
+                  <dt>Checked in</dt>
                   <dd>{r.row[COL.time] || "—"}</dd>
                 </div>
                 <div className="wide">
-                  <dt>{COL.id}</dt>
+                  <dt>Attendee ID</dt>
                   <dd>
                     <code>{r.row[COL.id]}</code>
                   </dd>
@@ -359,9 +421,9 @@ function ResultDialog({ r, onClose }: { r: Exclude<Result, { kind: "error" }>; o
           )}
         </div>
 
-        <div className="dialog-foot">
+        <div className="sheet-foot">
           <button className="btn primary" onClick={onClose}>
-            Close and continue
+            Next scan
           </button>
         </div>
       </div>
@@ -369,23 +431,24 @@ function ResultDialog({ r, onClose }: { r: Exclude<Result, { kind: "error" }>; o
   );
 }
 
-const svg = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+const svg = {
+  viewBox: "0 0 24 24",
+  fill: "none",
+  stroke: "currentColor",
+  strokeWidth: 1.6,
+  strokeLinecap: "round" as const,
+  strokeLinejoin: "round" as const,
+};
 
 const CheckIcon = () => (
-  <svg {...svg}>
+  <svg {...svg} strokeWidth={2}>
     <path d="m20 6-11 11-5-5" />
   </svg>
 );
 const AlertIcon = () => (
-  <svg {...svg}>
+  <svg {...svg} strokeWidth={2}>
     <circle cx="12" cy="12" r="9" />
-    <path d="M12 8v5M12 16.5v.01" />
-  </svg>
-);
-const ClockIcon = () => (
-  <svg {...svg} width="14" height="14">
-    <circle cx="12" cy="12" r="9" />
-    <path d="M12 7v5l3 2" />
+    <path d="M12 8v5M12 16.2v.01" />
   </svg>
 );
 const XIcon = () => (
@@ -393,9 +456,15 @@ const XIcon = () => (
     <path d="M18 6 6 18M6 6l12 12" />
   </svg>
 );
+const SearchIcon = () => (
+  <svg {...svg}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-3.6-3.6" />
+  </svg>
+);
 const GearIcon = () => (
   <svg {...svg}>
-    <circle cx="12" cy="12" r="3" />
-    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+    <circle cx="12" cy="12" r="3.2" />
+    <path d="M19.2 13.6a1.5 1.5 0 0 0 .3 1.65l.05.06a1.8 1.8 0 1 1-2.55 2.55l-.06-.05a1.5 1.5 0 0 0-1.65-.3 1.5 1.5 0 0 0-.9 1.37V19a1.8 1.8 0 1 1-3.6 0v-.1a1.5 1.5 0 0 0-.98-1.37 1.5 1.5 0 0 0-1.65.3l-.06.05a1.8 1.8 0 1 1-2.55-2.55l.05-.06a1.5 1.5 0 0 0 .3-1.65 1.5 1.5 0 0 0-1.37-.9H5a1.8 1.8 0 1 1 0-3.6h.1a1.5 1.5 0 0 0 1.37-.98 1.5 1.5 0 0 0-.3-1.65l-.05-.06a1.8 1.8 0 1 1 2.55-2.55l.06.05a1.5 1.5 0 0 0 1.65.3h.07a1.5 1.5 0 0 0 .9-1.37V5a1.8 1.8 0 1 1 3.6 0v.1a1.5 1.5 0 0 0 .9 1.37 1.5 1.5 0 0 0 1.65-.3l.06-.05a1.8 1.8 0 1 1 2.55 2.55l-.05.06a1.5 1.5 0 0 0-.3 1.65v.07a1.5 1.5 0 0 0 1.37.9H19a1.8 1.8 0 1 1 0 3.6h-.1a1.5 1.5 0 0 0-1.37.9z" />
   </svg>
 );
