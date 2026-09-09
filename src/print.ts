@@ -121,25 +121,53 @@ function roleCompany(row: Row): string {
 // TSPL delimits arguments with double quotes, so they cannot appear inside one.
 const tsplText = (s: string) => s.replace(/["\\]/g, "'").replace(/[\r\n]+/g, " ").trim();
 
-// Built-in bitmap fonts, widest first: name, char width, char height in dots.
+// Built-in bitmap fonts, tallest first: name, char width, char height in dots.
+// Font 5 is left out: the Xprinter clones render it uppercase-only.
 const FONTS: [string, number, number][] = [
-  ["5", 32, 48],
   ["4", 24, 32],
   ["3", 16, 24],
   ["2", 12, 20],
   ["1", 8, 12],
 ];
 
-// Widest font whose text still fits the line, then hard-truncate on the smallest.
-function fit(text: string, maxDots: number, from = 0) {
+const DOTS_PER_PT = (DPMM * 25.4) / 72;
+
+// Same type scale as the web badge: point size follows the label width, so a
+// short name does not blow up to the biggest font.
+function typeScale(widthMm: number) {
+  const namePt = Math.min(13, Math.max(7, widthMm * 0.2));
+  return { name: namePt * DOTS_PER_PT, role: namePt * 0.78 * DOTS_PER_PT };
+}
+
+// Greedy word wrap. Null when the text needs more than `max` lines at this font.
+function wrap(text: string, maxDots: number, charW: number, max: number): string[] | null {
+  const per = Math.max(1, Math.floor(maxDots / charW));
+  const out: string[] = [];
+  let line = "";
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    if (word.length > per) return null;
+    const next = line ? `${line} ${word}` : word;
+    if (next.length <= per) line = next;
+    else {
+      out.push(line);
+      line = word;
+    }
+  }
+  if (line) out.push(line);
+  return out.length && out.length <= max ? out : null;
+}
+
+// Tallest font at or under the target size that wraps inside `max` lines.
+function block(text: string, maxDots: number, targetDots: number, max: number) {
   const clean = tsplText(text);
-  for (let i = from; i < FONTS.length; i++) {
+  const start = Math.max(0, FONTS.findIndex(([, , charH]) => charH <= targetDots));
+  for (let i = start; i < FONTS.length; i++) {
     const [font, charW, charH] = FONTS[i];
-    if (clean.length * charW <= maxDots) return { i, font, h: charH, w: clean.length * charW, text: clean };
+    const lines = wrap(clean, maxDots, charW, max);
+    if (lines) return { font, charW, charH, lines };
   }
   const [font, charW, charH] = FONTS[FONTS.length - 1];
-  const cut = clean.slice(0, Math.max(1, Math.floor(maxDots / charW)));
-  return { i: FONTS.length - 1, font, h: charH, w: cut.length * charW, text: cut };
+  return { font, charW, charH, lines: [clean.slice(0, Math.max(1, Math.floor(maxDots / charW)))] };
 }
 
 function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
@@ -148,12 +176,14 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const m = 16; // margin, dots
   const inner = w - m * 2;
 
-  const name = fit(row[COL.name], inner);
-  // One step smaller than the name, as on the web badge.
-  const role = fit(roleCompany(row), inner, Math.min(name.i + 1, FONTS.length - 1));
+  const size = typeScale(s.widthMm);
+  const name = block(row[COL.name], inner, size.name, 2);
+  const role = block(roleCompany(row), inner, size.role, 2);
   const gap = 10; // QR to name
-  const lead = 4; // name to role
-  const text = name.h + lead + role.h;
+  const lead = 6; // name to role
+  const nameStep = Math.round(name.charH * 1.15);
+  const roleStep = Math.round(role.charH * 1.2);
+  const text = name.lines.length * nameStep + lead + role.lines.length * roleStep;
 
   // A UUID needs QR version 3 (29 modules) at ECC M; shrink the cell to fit.
   const modules = 29;
@@ -165,6 +195,11 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const top = Math.max(m, Math.floor((h - (qr + gap + text)) / 2));
   const mid = (width: number) => m + Math.max(0, Math.floor((inner - width) / 2));
   const nameY = top + qr + gap;
+  const roleY = nameY + name.lines.length * nameStep + lead;
+  const centred = (bl: ReturnType<typeof block>, y0: number, step: number) =>
+    bl.lines.map(
+      (t, i) => `TEXT ${mid(t.length * bl.charW)},${y0 + i * step},"${bl.font}",0,1,1,"${t}"`,
+    );
 
   const lines = [
     `SIZE ${s.widthMm} mm,${s.heightMm} mm`,
@@ -174,8 +209,8 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
     `SPEED ${s.speed}`,
     "CLS",
     `QRCODE ${mid(qr)},${top},M,${cell},A,0,"${tsplText(row[COL.id])}"`,
-    `TEXT ${mid(name.w)},${nameY},"${name.font}",0,1,1,"${name.text}"`,
-    `TEXT ${mid(role.w)},${nameY + name.h + lead},"${role.font}",0,1,1,"${role.text}"`,
+    ...centred(name, nameY, nameStep),
+    ...centred(role, roleY, roleStep),
     `PRINT 1,${s.copies}`,
   ];
   return bytes(lines.join("\r\n") + "\r\n");

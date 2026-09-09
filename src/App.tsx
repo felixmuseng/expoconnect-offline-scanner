@@ -325,6 +325,7 @@ function SearchDialog({
   onClose: () => void;
 }) {
   const searching = query.length >= 2;
+  const ordered = [...rows].sort((a, b) => Number(Boolean(a[COL.time])) - Number(Boolean(b[COL.time])));
   return (
     <div className="scrim" onClick={onClose}>
       <div className="sheet xl" onClick={(e) => e.stopPropagation()}>
@@ -370,7 +371,7 @@ function SearchDialog({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => (
+                {ordered.map((r) => (
                   <tr key={r[COL.id]} className={r[COL.time] ? "done" : ""}>
                     {headers.map((h) => (
                       <td key={h}>{r[h]}</td>
