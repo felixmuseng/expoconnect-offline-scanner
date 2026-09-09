@@ -4,6 +4,12 @@ Client-only React app for Chrome/Edge. Opens the attendee CSV, scans QR with web
 
 CSV columns: `Attendee ID, Full Name, Email, Company, Job Title, CheckIn Time`. QR content = Attendee ID.
 
+The file is the one ExpoConnect exports, and it goes back into the same importer, so:
+
+- `Attendee ID` is a UUID.
+- `CheckIn Time` is `YYYY-MM-DD HH:mm:ss` in WIB, whatever the laptop clock is set to.
+- A row that already has a time keeps it; a second scan only reprints the badge.
+
 ## Dev
 
 ```

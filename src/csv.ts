@@ -34,7 +34,13 @@ export function parseCsv(text: string): Csv {
   return { headers, rows, bom, eol };
 }
 
-const quote = (v: string) => (/[",\r\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+// A leading =, +, - or @ makes Excel and Sheets run the cell as a formula. The
+// server exporter pins those back to text the same way; re-writing a file it
+// wrote adds nothing, because a prefixed value no longer starts with one.
+const quote = (v: string) => {
+  const s = /^[=+\-@\t\r]/.test(v) ? `'${v}` : v;
+  return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+};
 
 export function serializeCsv({ headers, rows, bom, eol }: Csv): string {
   const lines = [headers, ...rows.map((r) => headers.map((h) => r[h] ?? ""))];
