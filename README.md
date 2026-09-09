@@ -29,16 +29,20 @@ node scripts/make-sample.mjs   # sample/attendee_list.csv + sample/qr/*.png
 ## Printer on Linux
 
 The USB node is owned by group `lp`, so the browser gets `Failed to execute 'open' on
-'USBDevice': Access denied.` One udev rule fixes it (this is the XP-420B; `lsusb` gives
-the IDs for another printer):
+'USBDevice': Access denied.` Run once per machine:
 
 ```
-echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="2d37", ATTR{idProduct}=="83d7", TAG+="uaccess"' \
-  | sudo tee /etc/udev/rules.d/99-label-printer.rules
-sudo udevadm control --reload
+./scripts/linux-printer-access.sh
 ```
 
-Unplug and replug the printer, then reload the page. Windows and macOS need nothing.
+It installs a udev rule that hands any USB printer to whoever is logged in at the
+screen. Not printer-specific — it matches USB interface class 07, so it covers the
+XP-420B and any other label or receipt printer.
+
+Replug the printer, then reload the page. Windows and macOS need nothing.
+
+The Docker image cannot do this: the browser holds the USB device, and the browser runs
+on the host, outside the container.
 
 ## Docker Hub
 
