@@ -69,7 +69,7 @@ fi
 # The operator folder tracks ENV-latest so update.bat picks up the next release.
 mkdir -p "$OUT"
 sed "s#\${IMAGE:-[^}]*}#${ENV_LATEST}#" docker-compose.yml > "$OUT/docker-compose.yml"
-cp docker/* "$OUT/"
+cp docker/* scripts/linux-printer-access.sh "$OUT/"
 
 echo
 echo "Version:         $VERSION_TAG"

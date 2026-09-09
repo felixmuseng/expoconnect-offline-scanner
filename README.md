@@ -32,8 +32,12 @@ The USB node is owned by group `lp`, so the browser gets `Failed to execute 'ope
 'USBDevice': Access denied.` Run once per machine:
 
 ```
-./scripts/linux-printer-access.sh
+./scripts/linux-printer-access.sh          # from the repo
+./linux-printer-access.sh                  # from an operator folder
 ```
+
+Both operator folders ship the script, and `start.sh` reminds the operator if the rule
+is missing.
 
 It installs a udev rule that hands any USB printer to whoever is logged in at the
 screen. Not printer-specific — it matches USB interface class 07, so it covers the

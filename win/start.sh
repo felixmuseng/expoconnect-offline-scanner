@@ -4,6 +4,9 @@ cd "$(dirname "$0")"
 PORT=8000
 URL="http://localhost:$PORT"
 
+[ -e /etc/udev/rules.d/99-usb-printer-uaccess.rules ] ||
+  echo "Printing over USB? Run ./linux-printer-access.sh once first."
+
 if ! curl -s -o /dev/null "$URL"; then
   if [ -x ./caddy ]; then
     nohup ./caddy file-server --root dist --listen 127.0.0.1:$PORT >/dev/null 2>&1 &
