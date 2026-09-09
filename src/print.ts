@@ -109,20 +109,37 @@ async function write(bytes: Uint8Array<ArrayBuffer>): Promise<number> {
 const enc = new TextEncoder();
 const bytes = (s: string) => Uint8Array.from(enc.encode(s)) as Uint8Array<ArrayBuffer>;
 
+// One line under the name: "Job Title @ Company", as the web badge prints it.
+function roleCompany(row: Row): string {
+  const role = row[COL.title]?.trim() || "Attendee";
+  const company = row[COL.company]?.trim();
+  return company ? `${role} @ ${company}` : role;
+}
+
 /* ---------- TSPL ---------- */
 
 // TSPL delimits arguments with double quotes, so they cannot appear inside one.
 const tsplText = (s: string) => s.replace(/["\\]/g, "'").replace(/[\r\n]+/g, " ").trim();
 
-// Widest built-in font whose text still fits the line, then hard-truncate.
-function fit(text: string, maxDots: number, fonts: [string, number][]): string {
+// Built-in bitmap fonts, widest first: name, char width, char height in dots.
+const FONTS: [string, number, number][] = [
+  ["5", 32, 48],
+  ["4", 24, 32],
+  ["3", 16, 24],
+  ["2", 12, 20],
+  ["1", 8, 12],
+];
+
+// Widest font whose text still fits the line, then hard-truncate on the smallest.
+function fit(text: string, maxDots: number, from = 0) {
   const clean = tsplText(text);
-  for (const [font, charW] of fonts) {
-    const max = Math.floor(maxDots / charW);
-    if (clean.length <= max) return `"${font}",0,1,1,"${clean}"`;
+  for (let i = from; i < FONTS.length; i++) {
+    const [font, charW, charH] = FONTS[i];
+    if (clean.length * charW <= maxDots) return { i, font, h: charH, w: clean.length * charW, text: clean };
   }
-  const [font, charW] = fonts[fonts.length - 1];
-  return `"${font}",0,1,1,"${clean.slice(0, Math.floor(maxDots / charW))}"`;
+  const [font, charW, charH] = FONTS[FONTS.length - 1];
+  const cut = clean.slice(0, Math.max(1, Math.floor(maxDots / charW)));
+  return { i: FONTS.length - 1, font, h: charH, w: cut.length * charW, text: cut };
 }
 
 function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
@@ -131,15 +148,23 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const m = 16; // margin, dots
   const inner = w - m * 2;
 
+  const name = fit(row[COL.name], inner);
+  // One step smaller than the name, as on the web badge.
+  const role = fit(roleCompany(row), inner, Math.min(name.i + 1, FONTS.length - 1));
+  const gap = 10; // QR to name
+  const lead = 4; // name to role
+  const text = name.h + lead + role.h;
+
   // A UUID needs QR version 3 (29 modules) at ECC M; shrink the cell to fit.
   const modules = 29;
-  const cell = Math.max(1, Math.min(s.qrCell, Math.floor((h - m - 112) / modules)));
+  const room = Math.min(inner, h - m * 2 - gap - text);
+  const cell = Math.max(1, Math.min(s.qrCell, Math.floor(room / modules)));
   const qr = modules * cell;
-  const qrY = h - m - qr;
 
-  const idText = tsplText(row[COL.id]);
-  const idX = m + qr + 12;
-  const idPerLine = Math.max(1, Math.floor((w - m - idX) / 8));
+  // Centre the whole stack on the label, QR on top.
+  const top = Math.max(m, Math.floor((h - (qr + gap + text)) / 2));
+  const mid = (width: number) => m + Math.max(0, Math.floor((inner - width) / 2));
+  const nameY = top + qr + gap;
 
   const lines = [
     `SIZE ${s.widthMm} mm,${s.heightMm} mm`,
@@ -148,15 +173,11 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
     `DENSITY ${s.density}`,
     `SPEED ${s.speed}`,
     "CLS",
-    `TEXT ${m},${m},${fit(row[COL.name], inner, [["4", 24], ["3", 16], ["2", 12]])}`,
-    `TEXT ${m},${m + 40},${fit(row[COL.title], inner, [["2", 12], ["1", 8]])}`,
-    `TEXT ${m},${m + 66},${fit(row[COL.company], inner, [["2", 12], ["1", 8]])}`,
-    `QRCODE ${m},${qrY},M,${cell},A,0,"${idText}"`,
+    `QRCODE ${mid(qr)},${top},M,${cell},A,0,"${tsplText(row[COL.id])}"`,
+    `TEXT ${mid(name.w)},${nameY},"${name.font}",0,1,1,"${name.text}"`,
+    `TEXT ${mid(role.w)},${nameY + name.h + lead},"${role.font}",0,1,1,"${role.text}"`,
+    `PRINT 1,${s.copies}`,
   ];
-  for (let i = 0; i * idPerLine < idText.length; i++) {
-    lines.push(`TEXT ${idX},${qrY + i * 16},"1",0,1,1,"${idText.slice(i * idPerLine, (i + 1) * idPerLine)}"`);
-  }
-  lines.push(`PRINT 1,${s.copies}`);
   return bytes(lines.join("\r\n") + "\r\n");
 }
 
@@ -171,17 +192,19 @@ function escpos(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const one = [
     ...b(ESC, 0x40), // init
     ...b(ESC, 0x61, 1), // center
-    ...b(GS, 0x21, 0x11), // double size
-    ...b(row[COL.name], "\n"),
-    ...b(GS, 0x21, 0x00),
-    ...b(row[COL.title], "\n", row[COL.company], "\n\n"),
     // QR: model 2, cell size, error correction M, store, print
     ...b(GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 50, 0),
     ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, Math.max(1, Math.min(8, s.qrCell))),
     ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 49),
     ...b(GS, 0x28, 0x6b, id.length + 3, 0, 0x31, 0x50, 48, id),
     ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x51, 48),
-    ...b(id, "\n\n\n"),
+    ...b("\n"),
+    ...b(ESC, 0x45, 1), // bold
+    ...b(GS, 0x21, 0x11), // double size
+    ...b(row[COL.name], "\n"),
+    ...b(GS, 0x21, 0x00),
+    ...b(ESC, 0x45, 0),
+    ...b(roleCompany(row), "\n\n\n"),
     ...b(GS, 0x56, 0), // cut
   ];
   return Uint8Array.from(Array.from({ length: s.copies }, () => one).flat());
