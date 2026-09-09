@@ -123,13 +123,14 @@ function roleCompany(row: Row): string {
 const tsplText = (s: string) => s.replace(/["\\]/g, "'").replace(/[\r\n]+/g, " ").trim();
 
 // Built-in bitmap fonts, tallest first: name, char width, char height in dots.
-// Font 5 is left out: the Xprinter clones render it uppercase-only.
+// Only the two the Xprinter clones draw at the documented width: font 5 comes
+// out uppercase-only, and fonts 1 and 2 print wider than their spec, which
+// throws off centring and runs off the label.
 const FONTS: [string, number, number][] = [
   ["4", 24, 32],
   ["3", 16, 24],
-  ["2", 12, 20],
-  ["1", 8, 12],
 ];
+const SMALLEST = FONTS[FONTS.length - 1];
 
 const DOTS_PER_PT = (DPMM * 25.4) / 72;
 
@@ -156,6 +157,8 @@ function wrap(text: string, maxDots: number, charW: number, max: number): string
 }
 
 // Tallest font at or under the target size that wraps inside `max` lines.
+// Text that does not fit even in the smallest font is cut with a "..." on the
+// last line, so it never runs off the label.
 function block(text: string, maxDots: number, targetDots: number, max: number) {
   const clean = tsplText(text);
   const start = Math.max(0, FONTS.findIndex(([, , charH]) => charH <= targetDots));
@@ -164,24 +167,39 @@ function block(text: string, maxDots: number, targetDots: number, max: number) {
     const lines = wrap(clean, maxDots, charW, max);
     if (lines) return { font, charW, charH, lines };
   }
-  const [font, charW, charH] = FONTS[FONTS.length - 1];
-  return { font, charW, charH, lines: [clean.slice(0, Math.max(1, Math.floor(maxDots / charW)))] };
+  const [font, charW, charH] = SMALLEST;
+  const per = Math.max(4, Math.floor(maxDots / charW));
+  const lines: string[] = [];
+  for (let rest = clean; lines.length < max; ) {
+    if (rest.length <= per) {
+      lines.push(rest);
+      break;
+    }
+    if (lines.length === max - 1) {
+      lines.push(`${rest.slice(0, per - 3).trimEnd()}...`);
+      break;
+    }
+    const cut = rest.lastIndexOf(" ", per);
+    const at = cut > 0 ? cut : per;
+    lines.push(rest.slice(0, at).trimEnd());
+    rest = rest.slice(at).trimStart();
+  }
+  return { font, charW, charH, lines };
 }
 
 function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const w = Math.round(s.widthMm * DPMM);
   const h = Math.round(s.heightMm * DPMM);
   const m = 16; // side margin, dots
-  const mv = 10; // top and bottom margin, dots
+  const mv = 8; // top and bottom margin, dots
   const inner = w - m * 2;
 
   const name = block(row[COL.name], inner, nameDots(s.widthMm), 2);
-  // Role is the next font down from the name, so it reads as smaller.
-  const role = block(roleCompany(row), inner, name.charH - 1, 2);
+  const role = block(roleCompany(row), inner, SMALLEST[2], 2);
   const gap = 8; // QR to name
-  const lead = 6; // name to role
+  const lead = 4; // name to role
   const nameStep = Math.round(name.charH * 1.15);
-  const roleStep = Math.round(role.charH * 1.1);
+  const roleStep = Math.round(role.charH * 1.05);
   const text = name.lines.length * nameStep + lead + role.lines.length * roleStep;
 
   // The printer picks the smallest QR version that holds the payload, and so
