@@ -1,6 +1,6 @@
-VERSION_TAG=prod-2026.09.1-132065e
-FULL_IMAGE_TAG=nathanael71/offline-checkin:prod-2026.09.1-132065e
+VERSION_TAG=prod-2026.09.2-ab096c8
+FULL_IMAGE_TAG=nathanael71/offline-checkin:prod-2026.09.2-ab096c8
 LATEST_TAG=nathanael71/offline-checkin:prod-latest
-REGISTRY_IMAGE=nathanael71/offline-checkin:prod-2026.09.1-132065e
+REGISTRY_IMAGE=nathanael71/offline-checkin:prod-2026.09.2-ab096c8
 REGISTRY_LATEST=nathanael71/offline-checkin:prod-latest
 ENV=prod
