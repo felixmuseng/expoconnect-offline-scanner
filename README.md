@@ -50,7 +50,13 @@ Versions follow the QuantumBytes scheme, `ENV-YYYY.MM.PATCH-SHA`:
   also pushed as a git tag, so a running container traces back to a commit.
 - `.docker-version` records what was published.
 
-Override the repository with `IMAGE_NAME=you/offline-checkin ./publish.sh`.
+Each release is one manifest list covering `linux/amd64` and `linux/arm64`. That
+covers Windows and Intel Macs (Docker Desktop runs Linux containers on WSL 2 and
+its Mac VM), Apple Silicon, and Linux on either architecture. No Windows-container
+image exists or is needed.
+
+Override the repository with `IMAGE_NAME=you/offline-checkin ./publish.sh`, or the
+targets with `PLATFORMS=linux/amd64 ./publish.sh`.
 
 Operator: Docker Desktop → search the image → Pull → Run → Optional settings → host port `8000` → open `http://localhost:8000` in Edge or Chrome. Or use the `out/docker/` folder (`start.bat`), which pins `prod-latest` so `update.bat` picks up the next release.
 
