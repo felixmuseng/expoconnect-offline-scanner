@@ -93,7 +93,10 @@ export function SettingsDialog({ value, onChange, onClose, printerName, onToggle
               <Num label="Speed (ips)" min={1} max={12} value={value.speed} onChange={(v) => set("speed", v)} />
               <Num label="QR cell (dots)" min={1} max={10} value={value.qrCell} onChange={(v) => set("qrCell", v)} />
             </div>
-            <p className="hint">Label settings apply to TSPL printers. ESC/POS uses QR cell and copies only.</p>
+            <p className="hint">
+              Label settings apply to TSPL printers, which size the QR to the label; QR cell and copies
+              are what ESC/POS uses.
+            </p>
           </div>
         </div>
 

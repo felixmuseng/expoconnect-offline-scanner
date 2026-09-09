@@ -134,9 +134,21 @@ const DOTS_PER_PT = (DPMM * 25.4) / 72;
 
 // Same type scale as the web badge: point size follows the label width, so a
 // short name does not blow up to the biggest font.
+// The web badge sets the role line at 0.78 of the name, but the bitmap fonts
+// step too coarsely for that to read as smaller — half the name matches the
+// printed proportions.
 function typeScale(widthMm: number) {
   const namePt = Math.min(13, Math.max(7, widthMm * 0.2));
-  return { name: namePt * DOTS_PER_PT, role: namePt * 0.78 * DOTS_PER_PT };
+  return { name: namePt * DOTS_PER_PT, role: namePt * 0.5 * DOTS_PER_PT };
+}
+
+// Byte-mode payload each QR version holds at ECC M; a version is 17 + 4v modules.
+const QR_M_BYTES = [11, 20, 32, 46, 60, 74, 86, 108, 130, 151, 177, 204, 223, 254, 277];
+
+function qrModules(payload: string): number {
+  const len = new TextEncoder().encode(payload).length;
+  const v = QR_M_BYTES.findIndex((cap) => len <= cap);
+  return 17 + 4 * (v < 0 ? QR_M_BYTES.length : v + 1);
 }
 
 // Greedy word wrap. Null when the text needs more than `max` lines at this font.
@@ -179,16 +191,19 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const size = typeScale(s.widthMm);
   const name = block(row[COL.name], inner, size.name, 2);
   const role = block(roleCompany(row), inner, size.role, 2);
-  const gap = 10; // QR to name
+  const gap = 8; // QR to name
   const lead = 6; // name to role
   const nameStep = Math.round(name.charH * 1.15);
   const roleStep = Math.round(role.charH * 1.2);
   const text = name.lines.length * nameStep + lead + role.lines.length * roleStep;
 
-  // A UUID needs QR version 3 (29 modules) at ECC M; shrink the cell to fit.
-  const modules = 29;
-  const room = Math.min(inner, h - m * 2 - gap - text);
-  const cell = Math.max(1, Math.min(s.qrCell, Math.floor(room / modules)));
+  // The QR takes every dot the text leaves, like the web badge, capped at the
+  // 60 mm the web template allows. Its module count follows the payload, or the
+  // printed code comes out wider than the space reserved and sits off-centre.
+  const id = tsplText(row[COL.id]);
+  const modules = qrModules(id);
+  const room = Math.min(inner, 60 * DPMM, h - m * 2 - gap - text);
+  const cell = Math.max(1, Math.min(10, Math.floor(room / modules)));
   const qr = modules * cell;
 
   // Centre the whole stack on the label, QR on top.
@@ -208,7 +223,7 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
     `DENSITY ${s.density}`,
     `SPEED ${s.speed}`,
     "CLS",
-    `QRCODE ${mid(qr)},${top},M,${cell},A,0,"${tsplText(row[COL.id])}"`,
+    `QRCODE ${mid(qr)},${top},M,${cell},A,0,"${id}"`,
     ...centred(name, nameY, nameStep),
     ...centred(role, roleY, roleStep),
     `PRINT 1,${s.copies}`,
