@@ -343,12 +343,7 @@ select.field {
   background: var(--grey-50); color: var(--grey-500);
   font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.6; word-break: break-word;
 }
-.hint { margin: 14px 0 0; font-size: 12px; line-height: 1.6; color: var(--grey-400); }
-.label-preview {
-  display: block; margin: 16px auto 0; width: min(100%, 280px);
-  border: 1px solid var(--line); border-radius: var(--r-sm); image-rendering: pixelated;
-}
-.row { display: flex; gap: 10px; align-items: center; }
+.hint { margin: 14px 0 0; font-size: 12px; line-height: 1.6; color: var(--grey-400); }.row { display: flex; gap: 10px; align-items: center; }
 .row .btn { flex: 1; }
 
 @media (max-width: 720px) {
