@@ -7,6 +7,9 @@ cd "$(dirname "$0")"
 
 IMAGE_NAME="${IMAGE_NAME:-nathanael71/offline-checkin}"
 REGISTRY="${DOCKER_REGISTRY:-docker.io}"
+# amd64 covers Windows (Docker Desktop runs Linux containers on WSL 2), Intel Macs
+# and Linux; arm64 covers Apple Silicon and ARM Windows.
+PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 OUT=out/docker
 PUSH=true
 [ "${1:-}" = "--no-push" ] && PUSH=false
@@ -44,14 +47,14 @@ echo "Version:  $VERSION_TAG"
 echo "Tags:     $VERSIONED, $ENV_LATEST, $LATEST_TAG"
 echo
 
-docker build -t "$VERSIONED" -t "$ENV_LATEST" -t "$LATEST_TAG" .
-
 if [ "$PUSH" = true ]; then
-  docker push "$VERSIONED"
-  docker push "$ENV_LATEST"
-  docker push "$LATEST_TAG"
+  docker buildx build --platform "$PLATFORMS" \
+    -t "$VERSIONED" -t "$ENV_LATEST" -t "$LATEST_TAG" --push .
   git tag "$VERSION_TAG" 2>/dev/null || echo "Tag $VERSION_TAG already exists locally."
   git push origin "$VERSION_TAG" 2>/dev/null || echo "Tag push failed or already on remote."
+else
+  # --load handles one platform, so a local build stays on this machine's.
+  docker buildx build -t "$VERSIONED" -t "$ENV_LATEST" -t "$LATEST_TAG" --load .
 fi
 
 {

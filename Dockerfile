@@ -1,4 +1,6 @@
-FROM node:24-alpine AS build
+# Built on the builder's own architecture: the output is static files, identical
+# for every target, so npm never runs under emulation.
+FROM --platform=$BUILDPLATFORM node:24-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
