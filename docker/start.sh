@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Ubuntu equivalent of start.bat. First run pulls the image (needs internet once).
 cd "$(dirname "$0")"
-URL="http://localhost:8000"
+[ -f .env ] && . ./.env
+URL="http://localhost:${PORT:-8000}"
 docker info >/dev/null 2>&1 || { echo "Docker is not running." >&2; exit 1; }
 [ -e /etc/udev/rules.d/99-usb-printer-uaccess.rules ] ||
   echo "Printing over USB? Run ./linux-printer-access.sh once first."

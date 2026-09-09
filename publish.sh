@@ -66,10 +66,12 @@ fi
   echo "ENV=$ENV"
 } > .docker-version
 
-# The operator folder tracks ENV-latest so update.bat picks up the next release.
+# The repo compose pins the release just published; the operator folder tracks
+# ENV-latest so update.bat picks up the next one.
+sed -i "s#\${IMAGE:-[^}]*}#\${IMAGE:-${VERSIONED}}#" docker-compose.yml
 mkdir -p "$OUT"
 sed "s#\${IMAGE:-[^}]*}#${ENV_LATEST}#" docker-compose.yml > "$OUT/docker-compose.yml"
-cp docker/* scripts/linux-printer-access.sh "$OUT/"
+cp docker/* scripts/linux-printer-access.sh .env.example "$OUT/"
 
 echo
 echo "Version:         $VERSION_TAG"

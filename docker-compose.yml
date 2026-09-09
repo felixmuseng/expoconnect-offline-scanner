@@ -1,7 +1,7 @@
 services:
   checkin:
-    image: ${IMAGE:-nathanael71/offline-checkin:prod-latest}
+    image: ${IMAGE:-nathanael71/offline-checkin:prod-2026.09.9-7f2a773}
     container_name: offline-checkin
     ports:
-      - "127.0.0.1:8000:80"
+      - "127.0.0.1:${PORT:-8000}:80"
     restart: unless-stopped
