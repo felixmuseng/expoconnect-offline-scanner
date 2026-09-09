@@ -21,8 +21,20 @@ export function search(rows: Row[], q: string, limit = 20): Row[] {
   return rows.filter((r) => norm(r[COL.name]).includes(n) || norm(r[COL.email]).includes(n)).slice(0, limit);
 }
 
-export function now(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+// The importer reads a bare "YYYY-MM-DD HH:mm:ss" as WIB, so write WIB rather
+// than whatever the laptop clock is set to — otherwise a machine on SGT or UTC
+// logs an hour the server then reads as the wrong instant.
+export function now(d = new Date()): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+    timeZone: "Asia/Jakarta",
+  }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")} ${get("hour")}:${get("minute")}:${get("second")}`;
 }
