@@ -167,6 +167,9 @@ export function App() {
 
   const checked = doc?.rows.filter((r) => r[COL.time]).length ?? 0;
   const hits = doc ? search(doc.rows, query) : [];
+  // Anything covering the stage. The error banner is not one: it sits above the
+  // stage and only a scan clears it, so pausing on it would strand the scanner.
+  const covered = showSearch || showSettings || (result !== null && result.kind !== "error");
 
   return (
     <div className="shell">
@@ -222,7 +225,7 @@ export function App() {
 
       {doc ? (
         <main className="stage">
-          <Scanner onScan={handleScan} paused={busy} />
+          <Scanner onScan={handleScan} paused={busy || covered} />
           <form
             className="entry"
             onSubmit={(e) => {
