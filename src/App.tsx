@@ -58,6 +58,30 @@ export function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, [result, showSearch, showSettings]);
 
+  // A USB scanner is a keyboard: it types the ID then presses Enter. Catch that
+  // anywhere on the page, so a scan still lands when no field has focus.
+  useEffect(() => {
+    if (!doc) return;
+    let buffer = "";
+    let lastAt = 0;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
+      const at = Date.now();
+      if (at - lastAt > 200) buffer = ""; // a human pausing, not a scanner burst
+      lastAt = at;
+      if (e.key === "Enter") {
+        const code = buffer.trim();
+        buffer = "";
+        if (code.length >= 4) handleScan(code);
+        return;
+      }
+      if (e.key.length === 1) buffer += e.key;
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [doc, busy, settings]);
+
   async function openHandle(h: FileSystemFileHandle) {
     try {
       const csv = parseCsv(await fs.readText(h));

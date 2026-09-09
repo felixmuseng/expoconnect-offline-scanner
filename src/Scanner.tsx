@@ -10,6 +10,8 @@ export function Scanner({ onScan, paused }: Props) {
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
   const [error, setError] = useState<string | null>(null);
+  // The frame matches the camera, so nothing the camera sees is cropped away.
+  const [ratio, setRatio] = useState<number | null>(null);
 
   useEffect(() => {
     const video = videoRef.current!;
@@ -44,6 +46,7 @@ export function Scanner({ onScan, paused }: Props) {
         return video.play();
       })
       .then(() => {
+        if (video.videoWidth) setRatio(video.videoWidth / video.videoHeight);
         raf = requestAnimationFrame(tick);
       })
       .catch((e: Error) => setError(e.message));
@@ -55,8 +58,16 @@ export function Scanner({ onScan, paused }: Props) {
   }, []);
 
   return (
-    <div className="scanner">
-      <video ref={videoRef} muted playsInline />
+    <div className="scanner" style={ratio ? { aspectRatio: String(ratio) } : undefined}>
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget;
+          if (v.videoWidth) setRatio(v.videoWidth / v.videoHeight);
+        }}
+      />
       <div className="brackets">
         <span className="tl" />
         <span className="tr" />
