@@ -5,10 +5,15 @@ set -euo pipefail
 RULE=/etc/udev/rules.d/99-usb-printer-uaccess.rules
 
 sudo tee "$RULE" >/dev/null <<'EOF'
-SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{ID_USB_INTERFACES}=="*:07*", TAG+="uaccess"
+# uaccess covers the logged-in user; plugdev is the fallback where logind sets no ACL.
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ENV{ID_USB_INTERFACES}=="*:07*", TAG+="uaccess", GROUP="plugdev", MODE="0660"
 EOF
 
 sudo udevadm control --reload
 sudo udevadm trigger --subsystem-match=usb --action=add
+
+if ! id -nG | tr ' ' '\n' | grep -qx plugdev; then
+  echo "Not in group plugdev: run 'sudo usermod -aG plugdev $USER' and log out once."
+fi
 
 echo "Installed $RULE. Replug the printer and reload the page."
