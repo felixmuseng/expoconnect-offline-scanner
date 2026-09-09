@@ -1,6 +1,6 @@
 services:
   checkin:
-    image: ${IMAGE:-docker.io/CHANGEME/offline-checkin:latest}
+    image: ${IMAGE:-nathanael71/offline-checkin:prod-latest}
     container_name: offline-checkin
     ports:
       - "127.0.0.1:8000:80"
