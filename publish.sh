@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # Builds the image, pushes it to the registry, and assembles the operator folder in out/docker/.
-# Usage: IMAGE=ghcr.io/you/offline-checkin:latest ./publish.sh [--no-push]
+# Usage: IMAGE=docker.io/you/offline-checkin:latest ./publish.sh [--no-push]
 set -euo pipefail
 cd "$(dirname "$0")"
 
-IMAGE="${IMAGE:-ghcr.io/CHANGEME/offline-checkin:latest}"
+IMAGE="${IMAGE:-docker.io/CHANGEME/offline-checkin:latest}"
 OUT=out/docker
 
 docker build -t "$IMAGE" .
