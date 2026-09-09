@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Scanner } from "./Scanner";
+import { SettingsDialog } from "./Settings";
 import { parseCsv, serializeCsv, type Csv, type Row } from "./csv";
 import * as fs from "./file";
 import * as printer from "./print";
+import { loadSettings, saveSettings, type Settings } from "./settings";
 import { COL, REQUIRED, findById, now, search } from "./store";
 
 type Result =
@@ -22,6 +24,8 @@ export function App() {
   const [log, setLog] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [printerName, setPrinterName] = useState<string | null>(null);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
     if (!fs.supported) return;
@@ -31,6 +35,15 @@ export function App() {
       else setLocked(h);
     });
   }, []);
+
+  // Reclaim a printer the browser already has permission for, and notice unplugs.
+  useEffect(() => {
+    printer.setOnChange(() => setPrinterName(printer.printerName()));
+    printer.restorePrinter().then(() => setPrinterName(printer.printerName()));
+    return () => printer.setOnChange(null);
+  }, []);
+
+  useEffect(() => saveSettings(settings), [settings]);
 
   async function openHandle(h: FileSystemFileHandle) {
     try {
@@ -78,7 +91,7 @@ export function App() {
         await fs.writeText(doc.handle, serializeCsv(next));
       }
       setResult({ kind: "ok", row });
-      const line = await printer.printBadge(row);
+      const line = await printer.printBadge(row, settings);
       setLog((l) => [line, ...l].slice(0, 100));
     } catch (e) {
       setResult({ kind: "error", message: (e as Error).message });
@@ -104,109 +117,285 @@ export function App() {
   }
 
   if (!fs.supported)
-    return <main><p className="err">This app needs Chrome or Edge (File System Access API).</p></main>;
+    return (
+      <div className="page">
+        <p className="banner err">This app needs Chrome or Edge (File System Access API).</p>
+      </div>
+    );
 
   const checked = doc?.rows.filter((r) => r[COL.time]).length ?? 0;
   const hits = doc ? search(doc.rows, query) : [];
 
   return (
-    <main>
-      <header>
-        <h1>Offline Check-in</h1>
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <h1>Offline Check-in</h1>
+          <p className="sub">
+            {doc
+              ? `${doc.name} · ${checked}/${doc.rows.length} checked in`
+              : "Open the attendee CSV. Check-ins are written back into that same file."}
+          </p>
+        </div>
         <div className="actions">
           {doc ? (
-            <>
-              <span className="meta"><b>{doc.name}</b> · {checked}/{doc.rows.length} checked in</span>
-              <button onClick={close}>Close file</button>
-            </>
+            <button className="btn outline" onClick={close}>
+              Close file
+            </button>
           ) : (
-            <button className="primary" onClick={pick}>Open CSV</button>
+            <button className="btn primary" onClick={pick}>
+              Open CSV
+            </button>
           )}
-          <button onClick={togglePrinter} disabled={!printer.supported} title={printer.supported ? "" : "WebUSB not available"}>
-            {printerName ? `Printer: ${printerName} ✕` : "Connect printer (mock until connected)"}
+          <button className="btn outline" onClick={() => setShowSettings(true)}>
+            <GearIcon />
+            Settings
           </button>
         </div>
       </header>
 
+      <hr className="rule" />
+
       {locked && !doc && (
-        <p className="hint">
-          Last file: <b>{locked.name}</b>. <button onClick={unlock}>Reopen</button>
+        <p className="banner info">
+          Last file: <b>{locked.name}</b>
+          <button className="btn sm primary" onClick={unlock}>
+            Reopen
+          </button>
         </p>
       )}
 
-      {result?.kind === "error" && <p className="err">{result.message}</p>}
+      {result?.kind === "error" && <p className="banner err">{result.message}</p>}
 
-      {!doc ? (
-        <p className="hint">Open the attendee CSV. Check-ins are written back into that same file.</p>
-      ) : (
+      {doc && (
         <>
-          <div className="grid">
-            <section>
-              <Scanner onScan={handleScan} paused={busy} />
-              <form className="manual" onSubmit={(e) => { e.preventDefault(); handleScan(manual); setManual(""); }}>
-                <input value={manual} onChange={(e) => setManual(e.target.value)} placeholder="Or type / USB-scan Attendee ID" />
-                <button type="submit" disabled={busy}>Check in</button>
-              </form>
-              <input className="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search by full name or email" />
-              {query.length >= 2 && (
-                <ul className="hits">
-                  {hits.length === 0 && <li className="hint">No match</li>}
-                  {hits.map((r) => (
-                    <li key={r[COL.id]}>
-                      <span><b>{r[COL.name]}</b> · {r[COL.email]} · {r[COL.company]}</span>
-                      <PrintButton row={r} busy={busy} onPrint={checkIn} />
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+          <div className="cols">
+            <div className="col-main">
+              <section className="card">
+                <div className="card-head">
+                  <h2>Scan or enter ID</h2>
+                  <span className="status">
+                    <span className={printerName ? "dot on" : "dot"} />
+                    {printerName ?? "No printer"}
+                  </span>
+                </div>
+                <form
+                  className="row"
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    handleScan(manual);
+                    setManual("");
+                  }}
+                >
+                  <input
+                    className="field"
+                    value={manual}
+                    onChange={(e) => setManual(e.target.value)}
+                    placeholder="Or type / USB-scan Attendee ID"
+                  />
+                  <button className="btn primary" type="submit" disabled={busy}>
+                    Check in
+                  </button>
+                </form>
+                <input
+                  className="field search"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search by full name or email"
+                />
+                {query.length >= 2 && (
+                  <ul className="hits">
+                    {hits.length === 0 && <li className="empty">No match</li>}
+                    {hits.map((r) => (
+                      <li key={r[COL.id]}>
+                        <span className="avatar sm">{initials(r[COL.name])}</span>
+                        <span className="who">
+                          <b>{r[COL.name]}</b>
+                          <span>
+                            {r[COL.email]} · {r[COL.company]}
+                          </span>
+                        </span>
+                        <PrintButton row={r} busy={busy} onPrint={checkIn} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </section>
 
-            <section>
-              {result && result.kind !== "error" && <ResultCard r={result} />}
-              <h3>Print log</h3>
+              <section className="card">
+                <div className="card-head">
+                  <h2>Camera scanner</h2>
+                </div>
+                <Scanner onScan={handleScan} paused={busy} />
+              </section>
+            </div>
+
+            <aside className="card">
+              <div className="card-head">
+                <h2>Print log</h2>
+              </div>
               <pre className="log">{log.join("\n") || "—"}</pre>
-            </section>
+            </aside>
           </div>
 
-          <table>
-            <thead>
-              <tr>{doc.headers.map((h) => <th key={h}>{h}</th>)}<th /></tr>
-            </thead>
-            <tbody>
-              {doc.rows.map((r) => (
-                <tr key={r[COL.id]} className={r[COL.time] ? "done" : ""}>
-                  {doc.headers.map((h) => <td key={h}>{r[h]}</td>)}
-                  <td><PrintButton row={r} busy={busy} onPrint={checkIn} /></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <section className="card table-card">
+            <div className="table-scroll">
+              <table>
+                <thead>
+                  <tr>
+                    {doc.headers.map((h) => (
+                      <th key={h}>{h}</th>
+                    ))}
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {doc.rows.map((r) => (
+                    <tr key={r[COL.id]} className={r[COL.time] ? "done" : ""}>
+                      {doc.headers.map((h) => (
+                        <td key={h}>{r[h]}</td>
+                      ))}
+                      <td>
+                        <PrintButton row={r} busy={busy} onPrint={checkIn} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
         </>
       )}
-    </main>
+
+      {result && result.kind !== "error" && <ResultDialog r={result} onClose={() => setResult(null)} />}
+
+      {showSettings && (
+        <SettingsDialog
+          value={settings}
+          onChange={setSettings}
+          onClose={() => setShowSettings(false)}
+          printerName={printerName}
+          onTogglePrinter={togglePrinter}
+        />
+      )}
+    </div>
   );
 }
+
+const initials = (name: string) =>
+  name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
 
 function PrintButton({ row, busy, onPrint }: { row: Row; busy: boolean; onPrint: (r: Row, force: boolean) => void }) {
   const done = Boolean(row[COL.time]);
   return (
-    <button className={done ? "" : "primary"} disabled={busy} onClick={() => onPrint(row, done)}>
+    <button className={done ? "btn sm" : "btn sm primary"} disabled={busy} onClick={() => onPrint(row, done)}>
       {done ? "Reprint" : "Print"}
     </button>
   );
 }
 
-function ResultCard({ r }: { r: Exclude<Result, { kind: "error" }> }) {
-  if (r.kind === "miss")
-    return <div className="card miss"><h2>Not found</h2><p>QR: <code>{r.id}</code></p></div>;
+function ResultDialog({ r, onClose }: { r: Exclude<Result, { kind: "error" }>; onClose: () => void }) {
+  const title = r.kind === "ok" ? "Check-in Success" : r.kind === "dup" ? "Already checked in" : "Not found";
   return (
-    <div className={`card ${r.kind}`}>
-      <h2>{r.kind === "ok" ? "Check-in Success" : "Already checked in"}</h2>
-      <dl>
-        {Object.values(COL).map((h) => (
-          <div key={h}><dt>{h}</dt><dd>{r.row[h]}</dd></div>
-        ))}
-      </dl>
+    <div className="scrim" onClick={onClose}>
+      <div className={`dialog ${r.kind}`} onClick={(e) => e.stopPropagation()}>
+        <div className="dialog-head">
+          <button type="button" className="close" aria-label="Close" onClick={onClose}>
+            <XIcon />
+          </button>
+          <div className="icon">{r.kind === "ok" ? <CheckIcon /> : <AlertIcon />}</div>
+          <h2>{title}</h2>
+          {r.kind !== "miss" && r.row[COL.time] && (
+            <p className="stamp">
+              <ClockIcon />
+              {r.row[COL.time]}
+            </p>
+          )}
+        </div>
+
+        <div className="dialog-body">
+          {r.kind === "miss" ? (
+            <dl className="fields">
+              <div className="wide">
+                <dt>Scanned code</dt>
+                <dd>
+                  <code>{r.id}</code>
+                </dd>
+              </div>
+            </dl>
+          ) : (
+            <>
+              <div className="identity">
+                <span className="avatar">{initials(r.row[COL.name])}</span>
+                <div>
+                  <p className="name">{r.row[COL.name]}</p>
+                  <p>{r.row[COL.title]}</p>
+                  <p>{r.row[COL.company]}</p>
+                </div>
+              </div>
+              <hr />
+              <dl className="fields">
+                <div>
+                  <dt>{COL.email}</dt>
+                  <dd>{r.row[COL.email]}</dd>
+                </div>
+                <div>
+                  <dt>{COL.time}</dt>
+                  <dd>{r.row[COL.time] || "—"}</dd>
+                </div>
+                <div className="wide">
+                  <dt>{COL.id}</dt>
+                  <dd>
+                    <code>{r.row[COL.id]}</code>
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
+        </div>
+
+        <div className="dialog-foot">
+          <button className="btn primary" onClick={onClose}>
+            Close and continue
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
+
+const svg = { viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+
+const CheckIcon = () => (
+  <svg {...svg}>
+    <path d="m20 6-11 11-5-5" />
+  </svg>
+);
+const AlertIcon = () => (
+  <svg {...svg}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v5M12 16.5v.01" />
+  </svg>
+);
+const ClockIcon = () => (
+  <svg {...svg} width="14" height="14">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 7v5l3 2" />
+  </svg>
+);
+const XIcon = () => (
+  <svg {...svg}>
+    <path d="M18 6 6 18M6 6l12 12" />
+  </svg>
+);
+const GearIcon = () => (
+  <svg {...svg}>
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+);

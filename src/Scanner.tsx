@@ -57,7 +57,13 @@ export function Scanner({ onScan, paused }: Props) {
   return (
     <div className="scanner">
       <video ref={videoRef} muted playsInline />
-      {error && <p className="err">Camera: {error}</p>}
+      <div className="brackets">
+        <span className="tl" />
+        <span className="tr" />
+        <span className="bl" />
+        <span className="br" />
+      </div>
+      {error && <p className="banner err">Camera: {error}</p>}
       {paused && <div className="overlay">Paused</div>}
     </div>
   );
