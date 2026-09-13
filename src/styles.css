@@ -256,19 +256,59 @@ body { margin: 0; }
 /* ---------- search modal ---------- */
 
 .search-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
-.search-head .field { flex: 1; }
+.search-fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.search-fields label { display: block; min-width: 0; }
+.search-fields span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--grey-400);
+}
+.search-fields .field { padding: 10px 12px; font-size: 14px; }
 
 .rows { list-style: none; margin: 0; padding: 6px; }
 .rows li {
   display: flex; align-items: center; gap: 12px;
-  padding: 9px 12px; border-radius: var(--r-sm);
+  border-radius: var(--r-sm);
   transition: background-color var(--fast) var(--ease);
 }
 .rows li:hover { background: var(--grey-50); }
+.select-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.rows input[type="checkbox"], table input[type="checkbox"], .search-foot input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-600);
+  flex: none;
+}
 .rows .who { flex: 1; min-width: 0; }
 .rows .who b { display: block; font-size: 14px; font-weight: 550; }
 .rows .who span { display: block; font-size: 12px; color: var(--grey-400); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rows .none { padding: 28px; text-align: center; font-size: 14px; color: var(--grey-300); }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--green-50);
+  color: var(--green-600);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .avatar {
   display: grid; place-items: center; flex: none;
@@ -290,14 +330,19 @@ tbody tr:last-child td { border-bottom: 0; }
 tbody tr.done td { background: var(--green-50); }
 tbody tr:hover td { background: var(--grey-50); }
 tbody tr.done:hover td { background: #ddeee6; }
+tbody tr { cursor: pointer; }
+thead th:first-child, tbody td:first-child { width: 44px; text-align: center; }
 
-/* The action stays reachable however wide the CSV is. */
-thead th:last-child, tbody td:last-child {
-  position: sticky; right: 0;
-  padding-left: 10px;
-  box-shadow: -8px 0 8px -8px rgba(27, 28, 34, .25);
+.search-foot { align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.search-foot .btn { flex: none; }
+.search-foot label {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--grey-400);
 }
-thead th:last-child { z-index: 2; }
 
 /* ---------- result modal ---------- */
 
@@ -350,6 +395,8 @@ select.field {
   .topbar { flex-wrap: wrap; gap: 10px; }
   .chip { display: none; }
   .facts, .grid2 { grid-template-columns: 1fr; }
+  .search-head { align-items: start; }
+  .search-fields { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

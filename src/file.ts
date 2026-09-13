@@ -42,12 +42,27 @@ export async function hasPermission(h: FileSystemFileHandle, ask: boolean) {
 
 export const readText = async (h: FileSystemFileHandle) => (await h.getFile()).text();
 
+const isStaleStateError = (e: unknown) =>
+  e instanceof DOMException &&
+  /state cached in an interface object|state had changed since it was read from disk/i.test(e.message);
+
+async function writeFresh(h: FileSystemFileHandle, text: string): Promise<void> {
+  const w = await h.createWritable({ keepExistingData: false });
+  await w.write(text);
+  await w.close();
+}
+
 let chain = Promise.resolve();
 export function writeText(h: FileSystemFileHandle, text: string): Promise<void> {
-  chain = chain.then(async () => {
-    const w = await h.createWritable();
-    await w.write(text);
-    await w.close();
+  const run = chain.catch(() => undefined).then(async () => {
+    try {
+      await writeFresh(h, text);
+    } catch (e) {
+      if (!isStaleStateError(e)) throw e;
+      await h.getFile();
+      await writeFresh(h, text);
+    }
   });
-  return chain;
+  chain = run;
+  return run;
 }
