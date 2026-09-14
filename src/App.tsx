@@ -183,6 +183,35 @@ export function App() {
     }
   }
 
+  async function saveAttendee(row: Row | null, values: Row) {
+    if (!doc || busy) return;
+    const index = row ? doc.rows.indexOf(row) : -1;
+    if (row && index < 0) throw new Error("This attendee is no longer in the open CSV");
+
+    setBusy(true);
+    try {
+      const latest = parseCsv(await fs.readText(doc.handle));
+      const missing = REQUIRED.filter((c) => !latest.headers.includes(c));
+      if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
+      const originalId = row ? normId(row[COL.id]) : "";
+      const matchedIndex = originalId ? latest.rows.findIndex((candidate) => normId(candidate[COL.id]) === originalId) : -1;
+      const targetIndex = matchedIndex >= 0 ? matchedIndex : index;
+      if (row && !latest.rows[targetIndex]) throw new Error("This attendee is no longer in the open CSV");
+
+      const nextRow = Object.fromEntries(
+        latest.headers.map((header) => [header, header === COL.time ? (row ? latest.rows[targetIndex][header] ?? "" : "") : values[header] ?? ""])
+      );
+      const nextRows = row ? latest.rows.map((candidate, candidateIndex) => (candidateIndex === targetIndex ? nextRow : candidate)) : [...latest.rows, nextRow];
+      const next = { ...latest, handle: doc.handle, name: doc.name, rows: nextRows };
+      await fs.writeText(doc.handle, serializeCsv(next));
+      setDoc(next);
+      const nextName = values[COL.name] || values[COL.id] || "attendee";
+      setLog((l) => [`${row ? "Edited" : "Added"} ${nextName}`, ...l].slice(0, 100));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   // Prints first, then marks the row and writes the CSV in place.
   async function checkIn(row: Row, force = false) {
     if (row[COL.time] && !force) return setResult({ kind: "dup", row });
@@ -331,6 +360,7 @@ export function App() {
           printedKeys={printedKeys}
           busy={busy}
           onPrint={printRows}
+          onSaveRow={saveAttendee}
           onClose={() => setShowSearch(false)}
         />
       )}
@@ -367,6 +397,7 @@ function SearchDialog({
   printedKeys,
   busy,
   onPrint,
+  onSaveRow,
   onClose,
 }: {
   rows: Row[];
@@ -377,9 +408,15 @@ function SearchDialog({
   printedKeys: Set<string>;
   busy: boolean;
   onPrint: (rows: Row[]) => void;
+  onSaveRow: (row: Row | null, values: Row) => Promise<void>;
   onClose: () => void;
 }) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [editValues, setEditValues] = useState<Row>({});
+  const [editError, setEditError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const searching = hasSearchQuery(queries);
   const ordered = [...rows].sort((a, b) => Number(Boolean(a[COL.time])) - Number(Boolean(b[COL.time])));
   const visible = searching ? hits : ordered;
@@ -388,6 +425,10 @@ function SearchDialog({
   const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((key) => selected.has(key));
   const isPrinted = (row: Row) => Boolean(row[COL.time]) || printedKeys.has(rowKey(rows, row));
   const visibleNotPrinted = visible.filter((row) => !isPrinted(row));
+  const editableHeaders = headers.filter((header) => header !== COL.time);
+  const editingRow = editingKey ? rows.find((row) => rowKey(rows, row) === editingKey) ?? null : null;
+  const editing = adding || Boolean(editingRow);
+  const editDisabled = busy || saving;
   const setRowSelected = (key: string, checked: boolean) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -414,6 +455,37 @@ function SearchDialog({
   const printSelected = () => {
     if (!busy && selectedRows.length > 0) onPrint(selectedRows);
   };
+  const beginEdit = (row: Row) => {
+    setAdding(false);
+    setEditingKey(rowKey(rows, row));
+    setEditValues(Object.fromEntries(editableHeaders.map((header) => [header, row[header] ?? ""])));
+    setEditError(null);
+  };
+  const beginAdd = () => {
+    setAdding(true);
+    setEditingKey(null);
+    setEditValues(Object.fromEntries(editableHeaders.map((header) => [header, ""])));
+    setEditError(null);
+  };
+  const cancelEdit = () => {
+    setAdding(false);
+    setEditingKey(null);
+    setEditValues({});
+    setEditError(null);
+  };
+  const saveEdit = async () => {
+    if (!editing || editDisabled) return;
+    setSaving(true);
+    setEditError(null);
+    try {
+      await onSaveRow(editingRow, editValues);
+      cancelEdit();
+    } catch (e) {
+      setEditError((e as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  };
   const querySummary = [
     queries.name.trim().length >= 2 && `name "${queries.name}"`,
     queries.email.trim().length >= 2 && `email "${queries.email}"`,
@@ -429,11 +501,19 @@ function SearchDialog({
         onKeyDown={(e) => {
           if (e.key === "Enter" && e.ctrlKey) {
             e.preventDefault();
+            if (editing) {
+              saveEdit();
+              return;
+            }
             printSelected();
           }
         }}
         onSubmit={(e) => {
           e.preventDefault();
+          if (editing) {
+            saveEdit();
+            return;
+          }
           printSelected();
         }}
       >
@@ -495,6 +575,18 @@ function SearchDialog({
                       </span>
                     </span>
                     {isPrinted(r) && <span className="status-pill">Printed</span>}
+                    <button
+                      className="icon-btn row-action"
+                      type="button"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        beginEdit(r);
+                      }}
+                      aria-label={`Edit ${r[COL.name]}`}
+                      title="Edit attendee"
+                    >
+                      <EditIcon />
+                    </button>
                   </label>
                 </li>
               ))}
@@ -515,6 +607,7 @@ function SearchDialog({
                   {headers.map((h) => (
                     <th key={h}>{h}</th>
                   ))}
+                  <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -540,12 +633,61 @@ function SearchDialog({
                     {headers.map((h) => (
                       <td key={h}>{r[h]}</td>
                     ))}
+                    <td>
+                      <button
+                        className="icon-btn row-action"
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          beginEdit(r);
+                        }}
+                        aria-label={`Edit ${r[COL.name]}`}
+                        title="Edit attendee"
+                      >
+                        <EditIcon />
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           )}
         </div>
+        {editing && (
+          <div className="edit-panel" aria-live="polite">
+            <div className="edit-panel-head">
+              <div>
+                <h2>{adding ? "Add attendee" : "Edit attendee"}</h2>
+                <p>{adding ? "New CSV row" : editingRow?.[COL.name] || editingRow?.[COL.id]}</p>
+              </div>
+              <button className="icon-btn" type="button" onClick={cancelEdit} aria-label="Close edit panel" disabled={editDisabled}>
+                <XIcon />
+              </button>
+            </div>
+            <div className="edit-grid">
+              {editableHeaders.map((header) => (
+                <label key={header}>
+                  <span>{header}</span>
+                  <input
+                    className="field"
+                    value={editValues[header] ?? ""}
+                    onChange={(e) => setEditValues((current) => ({ ...current, [header]: e.target.value }))}
+                    disabled={editDisabled}
+                  />
+                </label>
+              ))}
+            </div>
+            {editError && <p className="banner err">{editError}</p>}
+            <div className="edit-actions">
+              <button className="btn quiet" type="button" onClick={cancelEdit} disabled={editDisabled}>
+                Cancel
+              </button>
+              <button className="btn primary" type="button" onClick={saveEdit} disabled={editDisabled}>
+                {saving ? "Saving..." : adding ? "Add row" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        )}
         <div className="sheet-foot search-foot">
           <label>
             <input
@@ -557,6 +699,9 @@ function SearchDialog({
           </label>
           <button className="btn" type="button" disabled={busy || visibleNotPrinted.length === 0} onClick={setNotPrintedSelected}>
             Select not printed ({visibleNotPrinted.length})
+          </button>
+          <button className="btn" type="button" disabled={busy} onClick={beginAdd}>
+            Add attendee
           </button>
           <button className="btn primary" type="submit" disabled={busy || selectedRows.length === 0}>
             Print selected ({selectedRows.length})
@@ -656,6 +801,12 @@ const SearchIcon = () => (
   <svg {...svg}>
     <circle cx="11" cy="11" r="7" />
     <path d="m20 20-3.6-3.6" />
+  </svg>
+);
+const EditIcon = () => (
+  <svg {...svg}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
   </svg>
 );
 const GearIcon = () => (

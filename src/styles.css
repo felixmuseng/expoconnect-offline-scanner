@@ -297,6 +297,12 @@ body { margin: 0; }
 .rows .who b { display: block; font-size: 14px; font-weight: 550; }
 .rows .who span { display: block; font-size: 12px; color: var(--grey-400); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rows .none { padding: 28px; text-align: center; font-size: 14px; color: var(--grey-300); }
+.row-action {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.row-action svg { width: 16px; height: 16px; }
 .status-pill {
   display: inline-flex;
   align-items: center;
@@ -332,6 +338,67 @@ tbody tr:hover td { background: var(--grey-50); }
 tbody tr.done:hover td { background: #ddeee6; }
 tbody tr { cursor: pointer; }
 thead th:first-child, tbody td:first-child { width: 44px; text-align: center; }
+
+.edit-panel {
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--grey-50);
+}
+.edit-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.edit-panel-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.edit-panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.edit-panel-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--grey-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.edit-grid label {
+  display: block;
+  min-width: 0;
+}
+.edit-grid span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--grey-400);
+}
+.edit-grid .field {
+  padding: 9px 12px;
+  font-size: 14px;
+}
+.edit-panel .banner {
+  margin-top: 12px;
+}
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+.edit-actions .btn {
+  flex: none;
+}
 
 .search-foot { align-items: center; justify-content: flex-end; flex-wrap: wrap; }
 .search-foot .btn { flex: none; }
@@ -397,6 +464,7 @@ select.field {
   .facts, .grid2 { grid-template-columns: 1fr; }
   .search-head { align-items: start; }
   .search-fields { grid-template-columns: 1fr; }
+  .edit-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
