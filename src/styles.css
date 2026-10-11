@@ -256,19 +256,65 @@ body { margin: 0; }
 /* ---------- search modal ---------- */
 
 .search-head { padding: 16px 20px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; }
-.search-head .field { flex: 1; }
+.search-fields {
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.search-fields label { display: block; min-width: 0; }
+.search-fields span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--grey-400);
+}
+.search-fields .field { padding: 10px 12px; font-size: 14px; }
 
 .rows { list-style: none; margin: 0; padding: 6px; }
 .rows li {
   display: flex; align-items: center; gap: 12px;
-  padding: 9px 12px; border-radius: var(--r-sm);
+  border-radius: var(--r-sm);
   transition: background-color var(--fast) var(--ease);
 }
 .rows li:hover { background: var(--grey-50); }
+.select-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.rows input[type="checkbox"], table input[type="checkbox"], .search-foot input[type="checkbox"], .edit-grid input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand-600);
+  flex: none;
+}
 .rows .who { flex: 1; min-width: 0; }
 .rows .who b { display: block; font-size: 14px; font-weight: 550; }
 .rows .who span { display: block; font-size: 12px; color: var(--grey-400); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rows .none { padding: 28px; text-align: center; font-size: 14px; color: var(--grey-300); }
+.row-action {
+  width: 32px;
+  height: 32px;
+  flex: none;
+}
+.row-action svg { width: 16px; height: 16px; }
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 4px 8px;
+  border-radius: var(--r-sm);
+  background: var(--green-50);
+  color: var(--green-600);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
 
 .avatar {
   display: grid; place-items: center; flex: none;
@@ -290,14 +336,90 @@ tbody tr:last-child td { border-bottom: 0; }
 tbody tr.done td { background: var(--green-50); }
 tbody tr:hover td { background: var(--grey-50); }
 tbody tr.done:hover td { background: #ddeee6; }
+tbody tr { cursor: pointer; }
+thead th:first-child, tbody td:first-child { width: 44px; text-align: center; }
 
-/* The action stays reachable however wide the CSV is. */
-thead th:last-child, tbody td:last-child {
-  position: sticky; right: 0;
-  padding-left: 10px;
-  box-shadow: -8px 0 8px -8px rgba(27, 28, 34, .25);
+.edit-panel {
+  padding: 16px 20px;
+  border-top: 1px solid var(--line);
+  background: var(--grey-50);
 }
-thead th:last-child { z-index: 2; }
+.edit-panel-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.edit-panel-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.edit-panel-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.edit-panel-head p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: var(--grey-400);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.edit-grid label {
+  display: block;
+  min-width: 0;
+}
+.edit-grid .print-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 39px;
+  padding-top: 18px;
+}
+.edit-grid .print-status span {
+  margin-bottom: 0;
+}
+.edit-grid span {
+  display: block;
+  margin-bottom: 5px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--grey-400);
+}
+.edit-grid .field {
+  padding: 9px 12px;
+  font-size: 14px;
+}
+.edit-panel .banner {
+  margin-top: 12px;
+}
+.edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 14px;
+}
+.edit-actions .btn {
+  flex: none;
+}
+
+.search-foot { align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+.search-foot .btn { flex: none; }
+.search-foot label {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--grey-400);
+}
 
 /* ---------- result modal ---------- */
 
@@ -314,8 +436,26 @@ thead th:last-child { z-index: 2; }
 .sheet.miss .result-head { background: var(--red-600); }
 
 .identity { display: flex; align-items: center; gap: 13px; }
+.identity-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .identity .name { margin: 0; font-size: 16px; font-weight: 600; letter-spacing: -.01em; }
 .identity p { margin: 2px 0 0; font-size: 13px; color: var(--grey-400); }
+.vip-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 8px;
+  border-radius: var(--r-sm);
+  background: var(--amber-50);
+  color: var(--amber-700);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
 .facts { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0 0; padding: 16px 0 0; border-top: 1px solid var(--line); }
 .facts dt { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; color: var(--grey-300); }
 .facts dd { margin: 3px 0 0; font-size: 13px; overflow-wrap: anywhere; }
@@ -350,6 +490,9 @@ select.field {
   .topbar { flex-wrap: wrap; gap: 10px; }
   .chip { display: none; }
   .facts, .grid2 { grid-template-columns: 1fr; }
+  .search-head { align-items: start; }
+  .search-fields { grid-template-columns: 1fr; }
+  .edit-grid { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {

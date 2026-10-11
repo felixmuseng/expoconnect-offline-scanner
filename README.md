@@ -2,11 +2,12 @@
 
 Client-only React app for Chrome/Edge. Opens the attendee CSV, scans QR with webcam, writes `CheckIn Time` back into the same file, prints a badge over WebUSB (TSPL label printers, or ESC/POS receipt printers).
 
-CSV columns: `Attendee ID, Full Name, Email, Company, Job Title, CheckIn Time`. QR content = Attendee ID.
+CSV columns: `Attendee ID, Full Name, Email, Phone Number, Company, Job Title, CheckIn Time`. QR content = Attendee ID. Optional column: `Tier`, with blank or `VIP`.
 
 The file is the one ExpoConnect exports, and it goes back into the same importer, so:
 
 - `Attendee ID` is a UUID.
+- `Tier` is optional. If it exists, each value is blank or `VIP`.
 - `CheckIn Time` is `YYYY-MM-DD HH:mm:ss` in WIB, whatever the laptop clock is set to.
 - A row that already has a time keeps it; a second scan only reprints the badge.
 

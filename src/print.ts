@@ -110,12 +110,8 @@ async function write(bytes: Uint8Array<ArrayBuffer>): Promise<number> {
 const enc = new TextEncoder();
 const bytes = (s: string) => Uint8Array.from(enc.encode(s)) as Uint8Array<ArrayBuffer>;
 
-// One line under the name: "Job Title @ Company", as the web badge prints it.
-function roleCompany(row: Row): string {
-  const role = row[COL.title]?.trim() || "Attendee";
-  const company = row[COL.company]?.trim();
-  return company ? `${role} @ ${company}` : role;
-}
+const jobTitle = (row: Row) => row[COL.title]?.trim();
+const companyName = (row: Row) => row[COL.company]?.trim();
 
 /* ---------- TSPL ---------- */
 
@@ -193,33 +189,54 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
   const m = 16; // side margin, dots
   const mv = 8; // top and bottom margin, dots
   const inner = w - m * 2;
+  const id = tsplText(row[COL.id]);
+  const hasQr = Boolean(id);
 
-  const name = block(row[COL.name], inner, nameDots(s.widthMm), 2);
-  const role = block(roleCompany(row), inner, SMALLEST[2], 2);
-  const gap = 8; // QR to name
-  const lead = 4; // name to role
+  const name = block(row[COL.name], inner, nameDots(s.widthMm), hasQr ? 2 : 3);
+  const titleText = jobTitle(row);
+  const title = titleText ? block(titleText, inner, SMALLEST[2], hasQr ? 2 : 3) : null;
+  const companyText = companyName(row);
+  const company = companyText ? block(companyText, inner, SMALLEST[2], hasQr ? 2 : 3) : null;
+  const gap = hasQr ? 8 : 0; // QR to name
+  const lead = title || company ? 4 : 0;
+  const sectionGap = title && company ? 2 : 0;
   const nameStep = Math.round(name.charH * 1.15);
-  const roleStep = Math.round(role.charH * 1.05);
-  const text = name.lines.length * nameStep + lead + role.lines.length * roleStep;
+  const detailStep = Math.round(SMALLEST[2] * 1.05);
+  const text =
+    name.lines.length * nameStep +
+    lead +
+    (title ? title.lines.length * detailStep : 0) +
+    sectionGap +
+    (company ? company.lines.length * detailStep : 0);
 
   // The printer picks the smallest QR version that holds the payload, and so
   // does the encoder here; its module count is what the printed code measures.
   // The QR then takes every dot the text leaves, capped at the web template's 60 mm.
-  const id = tsplText(row[COL.id]);
-  const modules = QRCode.create(id, { errorCorrectionLevel: "M" }).modules.size;
-  const room = Math.min(inner, 60 * DPMM, h - mv * 2 - gap - text);
-  const cell = Math.max(1, Math.min(10, Math.floor(room / modules)));
+  const modules = hasQr ? QRCode.create(id, { errorCorrectionLevel: "M" }).modules.size : 0;
+  const room = hasQr ? Math.min(inner, 60 * DPMM, h - mv * 2 - gap - text) : 0;
+  const cell = hasQr ? Math.max(1, Math.min(10, Math.floor(room / modules))) : 0;
   const qr = modules * cell;
 
   // Centre the whole stack on the label, QR on top.
   const top = Math.max(mv, Math.floor((h - (qr + gap + text)) / 2));
   const mid = (width: number) => Math.max(m, Math.floor((w - width) / 2));
   const nameY = top + qr + gap;
-  const roleY = nameY + name.lines.length * nameStep + lead;
-  const centred = (bl: ReturnType<typeof block>, y0: number, step: number) =>
-    bl.lines.map(
-      (t, i) => `TEXT ${mid(t.length * bl.charW)},${y0 + i * step},"${bl.font}",0,1,1,"${t}"`,
-    );
+  const titleY = nameY + name.lines.length * nameStep + lead;
+  const companyY = titleY + (title ? title.lines.length * detailStep : 0) + sectionGap;
+  const centred = (bl: ReturnType<typeof block>, y0: number, step: number, bold = false) =>
+    bl.lines.flatMap((t, i) => {
+      const x = mid(t.length * bl.charW);
+      const y = y0 + i * step;
+      const line = `TEXT ${x},${y},"${bl.font}",0,1,1,"${t}"`;
+      return bold
+        ? [
+            line,
+            `TEXT ${x + 1},${y},"${bl.font}",0,1,1,"${t}"`,
+            `TEXT ${x},${y + 1},"${bl.font}",0,1,1,"${t}"`,
+            `TEXT ${x + 1},${y + 1},"${bl.font}",0,1,1,"${t}"`,
+          ]
+        : [line];
+    });
 
   const lines = [
     `SIZE ${s.widthMm} mm,${s.heightMm} mm`,
@@ -229,9 +246,10 @@ function tspl(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
     `DENSITY ${s.density}`,
     `SPEED ${s.speed}`,
     "CLS",
-    `QRCODE ${mid(qr)},${top},M,${cell},A,0,"${id}"`,
-    ...centred(name, nameY, nameStep),
-    ...centred(role, roleY, roleStep),
+    ...(hasQr ? [`QRCODE ${mid(qr)},${top},M,${cell},A,0,"${id}"`] : []),
+    ...centred(name, nameY, nameStep, !hasQr),
+    ...(title ? centred(title, titleY, detailStep) : []),
+    ...(company ? centred(company, companyY, detailStep) : []),
     `PRINT 1,${s.copies}`,
   ];
   return bytes(lines.join("\r\n") + "\r\n");
@@ -244,24 +262,53 @@ const ESC = 0x1b,
   GS = 0x1d;
 const b = (...xs: (number | string)[]) => xs.flatMap((x) => (typeof x === "string" ? [...enc.encode(x)] : [x]));
 
+function receiptLines(text: string, max = 2, width = 32): string[] {
+  const clean = text.replace(/[\r\n]+/g, " ").trim();
+  const lines: string[] = [];
+  for (let rest = clean; rest && lines.length < max; ) {
+    if (rest.length <= width) {
+      lines.push(rest);
+      break;
+    }
+    if (lines.length === max - 1) {
+      lines.push(`${rest.slice(0, width - 3).trimEnd()}...`);
+      break;
+    }
+    const cut = rest.lastIndexOf(" ", width);
+    const at = cut > 0 ? cut : width;
+    lines.push(rest.slice(0, at).trimEnd());
+    rest = rest.slice(at).trimStart();
+  }
+  return lines;
+}
+
 function escpos(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
-  const id = row[COL.id];
+  const id = row[COL.id].trim();
+  const hasQr = Boolean(id);
+  const title = jobTitle(row);
+  const company = companyName(row);
   const one = [
     ...b(ESC, 0x40), // init
     ...b(ESC, 0x61, 1), // center
     // QR: model 2, cell size, error correction M, store, print
-    ...b(GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 50, 0),
-    ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, Math.max(1, Math.min(8, s.qrCell))),
-    ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 49),
-    ...b(GS, 0x28, 0x6b, id.length + 3, 0, 0x31, 0x50, 48, id),
-    ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x51, 48),
-    ...b("\n"),
+    ...(hasQr
+      ? [
+          ...b(GS, 0x28, 0x6b, 4, 0, 0x31, 0x41, 50, 0),
+          ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x43, Math.max(1, Math.min(8, s.qrCell))),
+          ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x45, 49),
+          ...b(GS, 0x28, 0x6b, id.length + 3, 0, 0x31, 0x50, 48, id),
+          ...b(GS, 0x28, 0x6b, 3, 0, 0x31, 0x51, 48),
+          ...b("\n"),
+        ]
+      : []),
     ...b(ESC, 0x45, 1), // bold
     ...b(GS, 0x21, 0x11), // double size
     ...b(row[COL.name], "\n"),
     ...b(GS, 0x21, 0x00),
     ...b(ESC, 0x45, 0),
-    ...b(roleCompany(row), "\n\n\n"),
+    ...(title ? b(receiptLines(title, hasQr ? 2 : 3).join("\n"), "\n") : []),
+    ...(company ? b(receiptLines(company, hasQr ? 2 : 3).join("\n"), "\n") : []),
+    ...b("\n\n"),
     ...b(GS, 0x56, 0), // cut
   ];
   return Uint8Array.from(Array.from({ length: s.copies }, () => one).flat());
