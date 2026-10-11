@@ -1,19 +1,41 @@
-import type { Row } from "./csv";
+import type { Csv, Row } from "./csv";
 
 export const COL = {
   id: "Attendee ID",
   name: "Full Name",
   email: "Email",
+  phone: "Phone Number",
   company: "Company",
   title: "Job Title",
   time: "CheckIn Time",
+  tier: "Tier",
 } as const;
 
-export const REQUIRED = Object.values(COL);
+export const REQUIRED = [COL.id, COL.name, COL.email, COL.phone, COL.company, COL.title, COL.time];
 
 const norm = (s: string) => s.trim().toLowerCase();
+const normTier = (s: string) => s.trim().toUpperCase();
 
 export const findById = (rows: Row[], id: string) => rows.find((r) => norm(r[COL.id]) === norm(id));
+export const isVipTier = (value: string | undefined) => normTier(value ?? "") === "VIP";
+
+export function withPhoneColumn(csv: Csv): Csv {
+  if (csv.headers.includes(COL.phone)) return csv;
+  const emailIndex = csv.headers.indexOf(COL.email);
+  const insertAt = emailIndex >= 0 ? emailIndex + 1 : csv.headers.length;
+  const headers = [...csv.headers.slice(0, insertAt), COL.phone, ...csv.headers.slice(insertAt)];
+  const rows = csv.rows.map((row) => ({ ...row, [COL.phone]: "" }));
+  return { ...csv, headers, rows };
+}
+
+export function validateTier(headers: string[], rows: Row[]): string | null {
+  if (!headers.includes(COL.tier)) return null;
+  const badRow = rows.findIndex((row) => {
+    const tier = normTier(row[COL.tier] ?? "");
+    return tier !== "" && tier !== "VIP";
+  });
+  return badRow >= 0 ? `${COL.tier} must be empty or VIP. Row ${badRow + 2} has "${rows[badRow][COL.tier]}".` : null;
+}
 
 export type SearchQueries = {
   name: string;

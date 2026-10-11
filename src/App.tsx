@@ -5,7 +5,7 @@ import { parseCsv, serializeCsv, type Csv, type Row } from "./csv";
 import * as fs from "./file";
 import * as printer from "./print";
 import { loadSettings, saveSettings, type Settings } from "./settings";
-import { COL, REQUIRED, findById, hasSearchQuery, now, search, type SearchQueries } from "./store";
+import { COL, REQUIRED, findById, hasSearchQuery, isVipTier, now, search, validateTier, withPhoneColumn, type SearchQueries } from "./store";
 
 type Result =
   | { kind: "ok"; row: Row }
@@ -19,6 +19,13 @@ const normId = (id: string) => id.trim().toLowerCase();
 const rowKey = (rows: Row[], row: Row) => {
   const at = rows.indexOf(row);
   return `row:${at}`;
+};
+const hasCheckInTime = (row: Row) => Boolean(row[COL.time]?.trim());
+const assertCsvShape = (csv: Csv) => {
+  const missing = REQUIRED.filter((c) => !csv.headers.includes(c));
+  if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
+  const tierError = validateTier(csv.headers, csv.rows);
+  if (tierError) throw new Error(tierError);
 };
 
 export function App() {
@@ -92,9 +99,8 @@ export function App() {
 
   async function openHandle(h: FileSystemFileHandle) {
     try {
-      const csv = parseCsv(await fs.readText(h));
-      const missing = REQUIRED.filter((c) => !csv.headers.includes(c));
-      if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
+      const csv = withPhoneColumn(parseCsv(await fs.readText(h)));
+      assertCsvShape(csv);
       setDoc({ ...csv, handle: h, name: h.name });
       setLocked(null);
       setResult(null);
@@ -124,9 +130,9 @@ export function App() {
     setResult(null);
   }
 
-  async function printRows(rowsToPrint: Row[]) {
-    if (!doc || busy || printingId.current) return;
-    if (rowsToPrint.length === 0) return;
+  async function printRows(rowsToPrint: Row[]): Promise<Set<string>> {
+    if (!doc || busy || printingId.current) return new Set();
+    if (rowsToPrint.length === 0) return new Set();
     printingId.current = rowsToPrint.length === 1 ? rowsToPrint[0][COL.id] : "batch";
     setBusy(true);
     const lines: string[] = [];
@@ -139,7 +145,7 @@ export function App() {
         const line = await printer.printBadge(row, settings);
         lines.push(line);
         printed.add(rowKey(doc.rows, row));
-        if (!row[COL.time]) {
+        if (!hasCheckInTime(row)) {
           const id = normId(row[COL.id]);
           const checkedAt = now();
           if (id) checkedById.set(id, checkedAt);
@@ -148,22 +154,21 @@ export function App() {
         last = row;
       }
       const hasNewCheckIns = checkedById.size > 0 || checkedByRow.size > 0;
-      const latest = hasNewCheckIns ? parseCsv(await fs.readText(doc.handle)) : doc;
-      const missing = hasNewCheckIns ? REQUIRED.filter((c) => !latest.headers.includes(c)) : [];
-      if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
-      const sourceRows = hasNewCheckIns ? latest.rows : doc.rows;
-      const nextRows =
-        hasNewCheckIns
-          ? sourceRows.map((row, index) => {
-              const checkedAt = checkedById.get(normId(row[COL.id]));
-              const checkedByPosition = checkedByRow.get(index);
-              const nextTime = checkedAt ?? checkedByPosition;
-              return nextTime && !row[COL.time] ? { ...row, [COL.time]: nextTime } : row;
-            })
-          : sourceRows;
+      let nextRows = doc.rows;
       if (hasNewCheckIns) {
-        const next = { ...latest, handle: doc.handle, name: doc.name, rows: nextRows };
-        await fs.writeText(doc.handle, serializeCsv(next));
+        const next = await fs.updateText(doc.handle, async (text) => {
+          const latest = withPhoneColumn(parseCsv(text));
+          assertCsvShape(latest);
+          const rows = latest.rows.map((row, index) => {
+            const checkedAt = checkedById.get(normId(row[COL.id]));
+            const checkedByPosition = checkedByRow.get(index);
+            const nextTime = checkedAt ?? checkedByPosition;
+            return nextTime && !row[COL.time] ? { ...row, [COL.time]: nextTime } : row;
+          });
+          const updated = { ...latest, handle: doc.handle, name: doc.name, rows };
+          return { text: serializeCsv(updated), value: updated };
+        });
+        nextRows = next.rows;
         setDoc(next);
       }
       let shown: Row | null = null;
@@ -181,6 +186,7 @@ export function App() {
       printingId.current = null;
       setBusy(false);
     }
+    return printed;
   }
 
   async function saveAttendee(row: Row | null, values: Row) {
@@ -189,22 +195,37 @@ export function App() {
     if (row && index < 0) throw new Error("This attendee is no longer in the open CSV");
 
     setBusy(true);
+    let savedRow: Row | null = null;
     try {
-      const latest = parseCsv(await fs.readText(doc.handle));
-      const missing = REQUIRED.filter((c) => !latest.headers.includes(c));
-      if (missing.length) throw new Error(`Missing columns: ${missing.join(", ")}`);
-      const originalId = row ? normId(row[COL.id]) : "";
-      const matchedIndex = originalId ? latest.rows.findIndex((candidate) => normId(candidate[COL.id]) === originalId) : -1;
-      const targetIndex = matchedIndex >= 0 ? matchedIndex : index;
-      if (row && !latest.rows[targetIndex]) throw new Error("This attendee is no longer in the open CSV");
+      const next = await fs.updateText(doc.handle, async (text) => {
+        const latest = withPhoneColumn(parseCsv(text));
+        assertCsvShape(latest);
+        const originalId = row ? normId(row[COL.id]) : "";
+        const matchedIndex = originalId ? latest.rows.findIndex((candidate) => normId(candidate[COL.id]) === originalId) : -1;
+        const targetIndex = matchedIndex >= 0 ? matchedIndex : index;
+        if (row && !latest.rows[targetIndex]) throw new Error("This attendee is no longer in the open CSV");
 
-      const nextRow = Object.fromEntries(
-        latest.headers.map((header) => [header, header === COL.time ? (row ? latest.rows[targetIndex][header] ?? "" : "") : values[header] ?? ""])
-      );
-      const nextRows = row ? latest.rows.map((candidate, candidateIndex) => (candidateIndex === targetIndex ? nextRow : candidate)) : [...latest.rows, nextRow];
-      const next = { ...latest, handle: doc.handle, name: doc.name, rows: nextRows };
-      await fs.writeText(doc.handle, serializeCsv(next));
+        const nextRow = Object.fromEntries(
+          latest.headers.map((header) => [header, values[header] ?? ""])
+        );
+        savedRow = nextRow;
+        const nextRows = row ? latest.rows.map((candidate, candidateIndex) => (candidateIndex === targetIndex ? nextRow : candidate)) : [...latest.rows, nextRow];
+        const updated = { ...latest, handle: doc.handle, name: doc.name, rows: nextRows };
+        assertCsvShape(updated);
+        return { text: serializeCsv(updated), value: updated };
+      });
       setDoc(next);
+      setPrintedKeys((prev) => {
+        if (!row && !savedRow) return prev;
+        const nextPrinted = new Set(prev);
+        if (row) nextPrinted.delete(rowKey(doc.rows, row));
+        if (savedRow) {
+          const savedKey = rowKey(next.rows, savedRow);
+          if (hasCheckInTime(savedRow)) nextPrinted.add(savedKey);
+          else nextPrinted.delete(savedKey);
+        }
+        return nextPrinted;
+      });
       const nextName = values[COL.name] || values[COL.id] || "attendee";
       setLog((l) => [`${row ? "Edited" : "Added"} ${nextName}`, ...l].slice(0, 100));
     } finally {
@@ -214,7 +235,7 @@ export function App() {
 
   // Prints first, then marks the row and writes the CSV in place.
   async function checkIn(row: Row, force = false) {
-    if (row[COL.time] && !force) return setResult({ kind: "dup", row });
+    if (hasCheckInTime(row) && !force) return setResult({ kind: "dup", row });
     await printRows([row]);
   }
 
@@ -246,7 +267,7 @@ export function App() {
       </div>
     );
 
-  const checked = doc?.rows.filter((r) => r[COL.time]).length ?? 0;
+  const checked = doc?.rows.filter(hasCheckInTime).length ?? 0;
   const hits = doc ? search(doc.rows, queries) : [];
   // Anything covering the stage. The error banner is not one: it sits above the
   // stage and only a scan clears it, so pausing on it would strand the scanner.
@@ -407,7 +428,7 @@ function SearchDialog({
   onQueries: (q: SearchQueries) => void;
   printedKeys: Set<string>;
   busy: boolean;
-  onPrint: (rows: Row[]) => void;
+  onPrint: (rows: Row[]) => Promise<Set<string>>;
   onSaveRow: (row: Row | null, values: Row) => Promise<void>;
   onClose: () => void;
 }) {
@@ -418,14 +439,16 @@ function SearchDialog({
   const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const searching = hasSearchQuery(queries);
-  const ordered = [...rows].sort((a, b) => Number(Boolean(a[COL.time])) - Number(Boolean(b[COL.time])));
-  const visible = searching ? hits : ordered;
+  const isPrinted = (row: Row) => hasCheckInTime(row) || printedKeys.has(rowKey(rows, row));
+  const byPrintedLast = (a: Row, b: Row) => Number(isPrinted(a)) - Number(isPrinted(b));
+  const ordered = [...rows].sort(byPrintedLast);
+  const visible = searching ? [...hits].sort(byPrintedLast) : ordered;
   const visibleKeys = visible.map((r) => rowKey(rows, r));
   const selectedRows = visible.filter((r) => selected.has(rowKey(rows, r)));
   const allVisibleSelected = visibleKeys.length > 0 && visibleKeys.every((key) => selected.has(key));
-  const isPrinted = (row: Row) => Boolean(row[COL.time]) || printedKeys.has(rowKey(rows, row));
   const visibleNotPrinted = visible.filter((row) => !isPrinted(row));
   const editableHeaders = headers.filter((header) => header !== COL.time);
+  const printStatus = Boolean(editValues[COL.time]?.trim());
   const editingRow = editingKey ? rows.find((row) => rowKey(rows, row) === editingKey) ?? null : null;
   const editing = adding || Boolean(editingRow);
   const editDisabled = busy || saving;
@@ -452,19 +475,29 @@ function SearchDialog({
       for (const row of visibleNotPrinted) next.add(rowKey(rows, row));
       return next;
     });
-  const printSelected = () => {
-    if (!busy && selectedRows.length > 0) onPrint(selectedRows);
+  const printSelected = async () => {
+    if (busy || selectedRows.length === 0) return;
+    const printed = await onPrint(selectedRows);
+    if (printed.size === 0) return;
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const key of printed) next.delete(key);
+      return next;
+    });
   };
   const beginEdit = (row: Row) => {
     setAdding(false);
     setEditingKey(rowKey(rows, row));
-    setEditValues(Object.fromEntries(editableHeaders.map((header) => [header, row[header] ?? ""])));
+    const values: Row = Object.fromEntries(headers.map((header) => [header, row[header] ?? ""]));
+    if (isPrinted(row) && !values[COL.time]) values[COL.time] = now();
+    setEditValues(values);
     setEditError(null);
   };
   const beginAdd = () => {
     setAdding(true);
     setEditingKey(null);
-    setEditValues(Object.fromEntries(editableHeaders.map((header) => [header, ""])));
+    const values: Row = Object.fromEntries(headers.map((header) => [header, ""]));
+    setEditValues(values);
     setEditError(null);
   };
   const cancelEdit = () => {
@@ -558,7 +591,7 @@ function SearchDialog({
           {searching ? (
             <ul className="rows">
               {hits.length === 0 && <li className="none">No attendee matches {querySummary}</li>}
-              {hits.map((r, i) => (
+              {visible.map((r, i) => (
                 <li key={`${r[COL.id]}-${i}`}>
                   <label className="select-row">
                     <input
@@ -614,7 +647,7 @@ function SearchDialog({
                 {ordered.map((r, i) => (
                   <tr
                     key={`${r[COL.id]}-${i}`}
-                    className={r[COL.time] ? "done" : ""}
+                    className={isPrinted(r) ? "done" : ""}
                     onClick={(e) => {
                       if ((e.target as HTMLElement).tagName === "INPUT") return;
                       const key = rowKey(rows, r);
@@ -665,6 +698,29 @@ function SearchDialog({
               </button>
             </div>
             <div className="edit-grid">
+              <label className="print-status">
+                <span>Printed</span>
+                <input
+                  type="checkbox"
+                  checked={printStatus}
+                  onChange={(e) =>
+                    setEditValues((current) => ({
+                      ...current,
+                      [COL.time]: e.target.checked ? current[COL.time] || now() : "",
+                    }))
+                  }
+                  disabled={editDisabled}
+                />
+              </label>
+              <label>
+                <span>{COL.time}</span>
+                <input
+                  className="field"
+                  value={editValues[COL.time] ?? ""}
+                  onChange={(e) => setEditValues((current) => ({ ...current, [COL.time]: e.target.value }))}
+                  disabled={editDisabled}
+                />
+              </label>
               {editableHeaders.map((header) => (
                 <label key={header}>
                   <span>{header}</span>
@@ -738,7 +794,10 @@ function ResultDialog({ r, onClose }: { r: Exclude<Result, { kind: "error" }>; o
               <div className="identity">
                 <span className="avatar lg">{initials(r.row[COL.name])}</span>
                 <div>
-                  <p className="name">{r.row[COL.name]}</p>
+                  <div className="identity-name">
+                    <p className="name">{r.row[COL.name]}</p>
+                    {isVipTier(r.row[COL.tier]) && <span className="vip-pill">VIP</span>}
+                  </div>
                   <p>{[r.row[COL.title], r.row[COL.company]].filter(Boolean).join(" · ") || "—"}</p>
                 </div>
               </div>
