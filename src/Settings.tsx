@@ -1,6 +1,7 @@
 import { useState } from "react";
 import * as printer from "./print";
 import { PRESETS, type Settings } from "./settings";
+import { BadgeEditor } from "./BadgeEditor";
 
 type Props = {
   value: Settings;
@@ -8,33 +9,67 @@ type Props = {
   onClose: () => void;
   printerName: string | null;
   onTogglePrinter: () => void;
+  busy: boolean;
 };
 
-export function SettingsDialog({ value, onChange, onClose, printerName, onTogglePrinter }: Props) {
+export function SettingsDialog({ value, onChange, onClose, printerName, onTogglePrinter, busy }: Props) {
   const [note, setNote] = useState<string | null>(null);
-  const set = <K extends keyof Settings>(k: K, v: Settings[K]) => onChange({ ...value, [k]: v });
+  const [testing, setTesting] = useState(false);
+  const [testTexts, setTestTexts] = useState<{ name: string; country: string }>();
+  const change = (next: Settings) => {
+    try { onChange(next); setNote(null); return true; }
+    catch { setNote("The settings could not be saved. Free browser storage and try again."); return false; }
+  };
+  const set = <K extends keyof Settings>(k: K, v: Settings[K]) => change({ ...value, [k]: v });
   const preset = PRESETS.find((p) => p.widthMm === value.widthMm && p.heightMm === value.heightMm);
 
-  async function test() {
+  async function test(texts?: { name: string; country: string }) {
+    if (testing || busy) return;
+    setTesting(true);
+    setTestTexts(texts);
     try {
-      setNote(await printer.testPrint(value));
+      setNote(await printer.testPrint(value, texts));
     } catch (e) {
       setNote((e as Error).message);
+    } finally {
+      setTesting(false);
     }
   }
 
   return (
-    <div className="scrim" onClick={onClose}>
-      <div className="sheet lg" onClick={(e) => e.stopPropagation()}>
+    <div className="scrim" onClick={() => { if (!testing) onClose(); }}>
+      <div className={`sheet ${value.engine === "paper" ? "badge-settings" : "lg"}`} role="dialog" aria-modal="true" aria-label="Printer settings"
+        onClick={(e) => e.stopPropagation()} onKeyDown={(e) => { if (testing && e.key === "Escape") e.stopPropagation(); }}>
         <div className="sheet-head">
           <h2>Settings</h2>
           <div className="spacer" />
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={onClose} disabled={testing} aria-label="Close">
             <XIcon />
           </button>
         </div>
 
         <div className="sheet-body">
+          <div className="group">
+            <h3>Printing system</h3>
+            <label><span>Print with</span><select className="field" value={value.engine} disabled={busy || testing}
+              onChange={(e) => set("engine", e.target.value as Settings["engine"])}>
+              <option value="tspl">Thermal label printer (TSPL)</option>
+              <option value="escpos">Thermal receipt printer (ESC/POS)</option>
+              <option value="paper">Custom paper badge (office printer)</option>
+            </select></label>
+          </div>
+          {value.engine === "paper" ? <>
+            <div className="group">
+              <h3>Office printer</h3>
+              <p className="hint">Choose the office printer in the browser print dialog. A USB connection in this app is not required. Only the name and country are printed on the pre-printed paper.</p>
+              <p className="hint">For printing without a dialog, start Chrome with --kiosk-printing and set the badge printer as the default printer.</p>
+              <Num label="Copies" min={1} max={9} value={value.copies} onChange={(v) => { if (!testing && !busy) set("copies", Math.round(v)); }} />
+            </div>
+            <div className="group">
+              <BadgeEditor value={value.paperLayout} onChange={(paperLayout) => change({ ...value, paperLayout })}
+                onTest={test} disabled={testing || busy} />
+            </div>
+          </> : <>
           <div className="group">
             <h3>Printer</h3>
             <span className={printerName ? "chip live" : "chip"}>
@@ -46,11 +81,10 @@ export function SettingsDialog({ value, onChange, onClose, printerName, onToggle
               <button className="btn" onClick={onTogglePrinter} disabled={!printer.supported}>
                 {printerName ? "Disconnect" : "Connect printer"}
               </button>
-              <button className="btn" onClick={test}>
+              <button className="btn" onClick={() => test()} disabled={testing || busy}>
                 Test print
               </button>
             </div>
-            {note && <p className="note">{note}</p>}
           </div>
 
           <div className="group">
@@ -74,7 +108,7 @@ export function SettingsDialog({ value, onChange, onClose, printerName, onToggle
                   value={preset ? preset.label : "custom"}
                   onChange={(e) => {
                     const p = PRESETS.find((x) => x.label === e.target.value);
-                    if (p) onChange({ ...value, widthMm: p.widthMm, heightMm: p.heightMm });
+                    if (p) change({ ...value, widthMm: p.widthMm, heightMm: p.heightMm });
                   }}
                 >
                   {!preset && <option value="custom">Custom</option>}
@@ -98,10 +132,15 @@ export function SettingsDialog({ value, onChange, onClose, printerName, onToggle
               are what ESC/POS uses.
             </p>
           </div>
+          </>}
+          {note && <p className="note" role="status">{note}</p>}
+          {value.engine === "paper" && note?.includes("PAPER print dialog closed") && <div className="badge-actions">
+            <span>Did the badge print?</span><button className="btn" onClick={() => test(testTexts)} disabled={testing}>Reprint test badge</button>
+          </div>}
         </div>
 
         <div className="sheet-foot">
-          <button className="btn primary" onClick={onClose}>
+          <button className="btn primary" onClick={onClose} disabled={testing}>
             Done
           </button>
         </div>

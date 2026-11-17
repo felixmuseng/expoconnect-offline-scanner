@@ -7,11 +7,12 @@ export const COL = {
   phone: "Phone Number",
   company: "Company",
   title: "Job Title",
+  country: "Country",
   time: "CheckIn Time",
   tier: "Tier",
 } as const;
 
-export const REQUIRED = [COL.id, COL.name, COL.email, COL.phone, COL.company, COL.title, COL.time];
+export const REQUIRED = [COL.id, COL.name, COL.email, COL.phone, COL.company, COL.title, COL.country, COL.time];
 
 const norm = (s: string) => s.trim().toLowerCase();
 const normTier = (s: string) => s.trim().toUpperCase();
@@ -19,13 +20,17 @@ const normTier = (s: string) => s.trim().toUpperCase();
 export const findById = (rows: Row[], id: string) => rows.find((r) => norm(r[COL.id]) === norm(id));
 export const isVipTier = (value: string | undefined) => normTier(value ?? "") === "VIP";
 
-export function withPhoneColumn(csv: Csv): Csv {
-  if (csv.headers.includes(COL.phone)) return csv;
-  const emailIndex = csv.headers.indexOf(COL.email);
-  const insertAt = emailIndex >= 0 ? emailIndex + 1 : csv.headers.length;
-  const headers = [...csv.headers.slice(0, insertAt), COL.phone, ...csv.headers.slice(insertAt)];
-  const rows = csv.rows.map((row) => ({ ...row, [COL.phone]: "" }));
-  return { ...csv, headers, rows };
+export function withOptionalColumns(csv: Csv): Csv {
+  let result = csv;
+  for (const [column, after] of [[COL.phone, COL.email], [COL.country, COL.title]]) {
+    if (result.headers.includes(column)) continue;
+    const index = result.headers.indexOf(after);
+    const insertAt = index >= 0 ? index + 1 : result.headers.length;
+    const headers = [...result.headers.slice(0, insertAt), column, ...result.headers.slice(insertAt)];
+    const rows = result.rows.map((row) => ({ ...row, [column]: "" }));
+    result = { ...result, headers, rows };
+  }
+  return result;
 }
 
 export function validateTier(headers: string[], rows: Row[]): string | null {

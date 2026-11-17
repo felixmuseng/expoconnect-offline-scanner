@@ -4,6 +4,7 @@ import type { Row } from "./csv";
 import { COL } from "./store";
 import type { Settings } from "./settings";
 import QRCode from "qrcode";
+import { printPaperBadge } from "./paper-print";
 
 export const supported = "usb" in navigator;
 
@@ -316,11 +317,18 @@ function escpos(row: Row, s: Settings): Uint8Array<ArrayBuffer> {
 
 /* ---------- entry points ---------- */
 
-export const render = (row: Row, s: Settings) => (s.engine === "tspl" ? tspl(row, s) : escpos(row, s));
+export const render = (row: Row, s: Settings) => {
+  if (s.engine === "paper") throw new Error("Paper badges use the browser print dialog.");
+  return s.engine === "tspl" ? tspl(row, s) : escpos(row, s);
+};
 
 export async function printBadge(row: Row, s: Settings): Promise<string> {
   const stamp = new Date().toLocaleTimeString();
   const who = `${row[COL.id]} ${row[COL.name]}`;
+  if (s.engine === "paper") {
+    await printPaperBadge({ name: row[COL.name] ?? "", country: row[COL.country] ?? "" }, s.paperLayout, s.copies);
+    return `[${stamp}] PAPER print dialog closed (print or cancel): ${who}`;
+  }
   const payload = render(row, s);
   if (!device) return `[${stamp}] MOCK ${s.engine.toUpperCase()} (no printer connected): ${who}`;
   const sent = await write(payload);
@@ -333,9 +341,10 @@ const SAMPLE: Row = {
   [COL.email]: "test@example.com",
   [COL.company]: "Offline Check-in",
   [COL.title]: "Printer Test",
+  [COL.country]: "Côte d’Ivoire",
   [COL.time]: "",
 };
 
-export async function testPrint(s: Settings): Promise<string> {
-  return printBadge(SAMPLE, s);
+export async function testPrint(s: Settings, texts?: { name: string; country: string }): Promise<string> {
+  return printBadge(texts ? { ...SAMPLE, [COL.name]: texts.name, [COL.country]: texts.country } : SAMPLE, s);
 }

@@ -1,5 +1,7 @@
 // Printer settings, persisted so a reload keeps the operator's setup.
-export type Engine = "tspl" | "escpos";
+import { defaultPaperLayout, normalizeLayout, type PaperLayout } from "./paper-layout";
+
+export type Engine = "tspl" | "escpos" | "paper";
 
 export type Settings = {
   engine: Engine;
@@ -10,6 +12,7 @@ export type Settings = {
   speed: number; // TSPL SPEED, inches/sec
   qrCell: number; // TSPL QRCODE cell width 1~10
   copies: number;
+  paperLayout: PaperLayout;
 };
 
 export const DEFAULTS: Settings = {
@@ -21,6 +24,7 @@ export const DEFAULTS: Settings = {
   speed: 4,
   qrCell: 5,
   copies: 1,
+  paperLayout: defaultPaperLayout(),
 };
 
 // Label presets from the benchmark app (qr.rnrizki.my.id).
@@ -36,16 +40,17 @@ export const PRESETS: { label: string; widthMm: number; heightMm: number }[] = [
   { label: "100 × 150 mm", widthMm: 100, heightMm: 150 },
 ];
 
-const KEY = "offline-checkin.printer";
+export const SETTINGS_KEY = "offline-checkin.printer";
 
 const num = (v: unknown, fallback: number, min: number, max: number) =>
   typeof v === "number" && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
 
 export function loadSettings(): Settings {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? "{}") as Partial<Settings>;
+    const parsed: unknown = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
+    const raw = (parsed && typeof parsed === "object" ? parsed : {}) as Partial<Settings>;
     return {
-      engine: raw.engine === "escpos" ? "escpos" : DEFAULTS.engine,
+      engine: raw.engine === "escpos" || raw.engine === "paper" ? raw.engine : DEFAULTS.engine,
       widthMm: num(raw.widthMm, DEFAULTS.widthMm, 10, 120),
       heightMm: num(raw.heightMm, DEFAULTS.heightMm, 10, 300),
       gapMm: num(raw.gapMm, DEFAULTS.gapMm, 0, 10),
@@ -53,6 +58,7 @@ export function loadSettings(): Settings {
       speed: num(raw.speed, DEFAULTS.speed, 1, 12),
       qrCell: num(raw.qrCell, DEFAULTS.qrCell, 1, 10),
       copies: num(raw.copies, DEFAULTS.copies, 1, 9),
+      paperLayout: normalizeLayout(raw.paperLayout),
     };
   } catch {
     return { ...DEFAULTS };
@@ -60,5 +66,5 @@ export function loadSettings(): Settings {
 }
 
 export function saveSettings(s: Settings) {
-  localStorage.setItem(KEY, JSON.stringify(s));
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
 }

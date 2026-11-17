@@ -2,15 +2,15 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import QRCode from "qrcode";
 
-const headers = ["Attendee ID", "Full Name", "Email", "Phone Number", "Company", "Job Title", "CheckIn Time", "Tier"];
+const headers = ["Attendee ID", "Full Name", "Email", "Phone Number", "Company", "Job Title", "Country", "CheckIn Time", "Tier"];
 // Attendee IDs are UUIDs because that is what the server exports and what its
 // importer accepts back; fixed values keep sample/qr/*.png stable across runs.
 const rows = [
-  ["3f2504e0-4f89-41d3-9a0c-0305e82c3301", "Budi Santoso", "budi@majujaya.id", "+62 812 0000 3301", "PT Maju Jaya", "CEO", "", "VIP"],
-  ["3f2504e0-4f89-41d3-9a0c-0305e82c3302", "Siti Rahma", "siti@sinarabadi.id", "+62 812 0000 3302", "CV Sinar Abadi", "HR Manager", "", ""],
-  ["3f2504e0-4f89-41d3-9a0c-0305e82c3303", "Andi Wijaya", "andi@nusantaratech.id", "+62 812 0000 3303", "PT Nusantara Tech", "Engineer", "", ""],
-  ["3f2504e0-4f89-41d3-9a0c-0305e82c3304", "Dewi Lestari", "dewi@wellbeingchampions.sg", "+65 8123 3304", "Wellbeing Champions", "Speaker, Wellbeing", "", ""],
-  ["3f2504e0-4f89-41d3-9a0c-0305e82c3305", "Rizky Pratama", "rizky@cahayadigital.id", "+62 812 0000 3305", "PT Cahaya Digital", "Marketing Lead", "", ""],
+  ["3f2504e0-4f89-41d3-9a0c-0305e82c3301", "Budi Santoso", "budi@majujaya.id", "+62 812 0000 3301", "PT Maju Jaya", "CEO", "Indonesia", "", "VIP"],
+  ["3f2504e0-4f89-41d3-9a0c-0305e82c3302", "Siti Rahma", "siti@sinarabadi.id", "+62 812 0000 3302", "CV Sinar Abadi", "HR Manager", "Indonesia", "", ""],
+  ["3f2504e0-4f89-41d3-9a0c-0305e82c3303", "Andi Wijaya", "andi@nusantaratech.id", "+62 812 0000 3303", "PT Nusantara Tech", "Engineer", "Indonesia", "", ""],
+  ["3f2504e0-4f89-41d3-9a0c-0305e82c3304", "Dewi Lestari", "dewi@wellbeingchampions.sg", "+65 8123 3304", "Wellbeing Champions", "Speaker, Wellbeing", "Singapore", "", ""],
+  ["3f2504e0-4f89-41d3-9a0c-0305e82c3305", "Rizky Pratama", "rizky@cahayadigital.id", "+62 812 0000 3305", "PT Cahaya Digital", "Marketing Lead", "Indonesia", "", ""],
 ];
 
 const q = (v) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
